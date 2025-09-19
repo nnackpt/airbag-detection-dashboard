@@ -93,7 +93,7 @@ function formatInt(n: number): string {
 }
 
 function formatPercent(n: number | null | undefined): string {
-  return n == null || Number.isNaN(n) ? "—" : `${n.toFixed(1)}%`;
+  return n == null || Number.isNaN(n) ? "—" : `${n.toFixed(2)}%`;
 }
 
 async function getKpiOverallStats(model: string): Promise<KpiOverallStats> {
