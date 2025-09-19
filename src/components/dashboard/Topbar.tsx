@@ -9,9 +9,9 @@ export default function Topbar() {
         <h1 className="m-0 text-[37px] font-extrabold tracking-wider uppercase text-[#164799] leading-tight">
           Airbag Detection Dashboard
         </h1>
-        <span className="text-[#164799] font-bold text-[20px]">
+        {/* <span className="text-[#164799] font-bold text-[20px]">
           Real-time monitoring and alerts
-        </span>
+        </span> */}
       </div>
     </div>
   );

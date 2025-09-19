@@ -1,16 +1,16 @@
 "use client"
 
 import Link from "next/link";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef } from "react";
 import { usePathname } from "next/navigation";
 
 import {
   ChartBarIcon,
   ArrowUpIcon,
-  HomeIcon
+  HomeIcon,
 } from "@heroicons/react/24/outline";
 
-import { motion, AnimatePresence, MotionGlobalConfig } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
@@ -31,40 +31,77 @@ interface SidebarMenuGroup {
 interface SidebarProps {
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  selectedModel?: string;
+  onModelChange?: (model: string) => void;
 }
 
+type TempBand = 'AMBIENT' | 'HOT' | 'COLD';
+type SpecBox = { target: string; spec: string; color: string };
+type ModelSpec = Record<TempBand, SpecBox[]>;
+
+const MODEL_OPTIONS = ['PAB', 'XYZ']; // เพิ่มโมเดลใหม่ได้ที่นี่
+
+const MODEL_SPECS: Record<string, ModelSpec> = {
+  PAB: {
+    AMBIENT: [
+      { target: 'F#1', spec: '≤17', color: '#39c06b' },
+      { target: 'F#2', spec: '≤20', color: '#39c06b' },
+      { target: 'R#3', spec: '≤19', color: '#39c06b' },
+    ],
+    HOT: [
+      { target: 'F#1', spec: '≤17', color: '#e23b2e' },
+      { target: 'F#2', spec: '≤20', color: '#e23b2e' },
+      { target: 'R#3', spec: '≤19', color: '#e23b2e' },
+    ],
+    COLD: [
+      { target: 'F#1', spec: '≤21', color: '#3fa0f5' },
+      { target: 'F#2', spec: '≤22', color: '#3fa0f5' },
+      { target: 'R#3', spec: '≤20', color: '#3fa0f5' },
+    ],
+  },
+  XYZ: {
+    AMBIENT: [
+      { target: 'A#1', spec: '≤15', color: '#39c06b' },
+      { target: 'A#2', spec: '≤18', color: '#39c06b' },
+      { target: 'B#3', spec: '≤16', color: '#39c06b' },
+    ],
+    HOT: [
+      { target: 'A#1', spec: '≤15', color: '#e23b2e' },
+      { target: 'A#2', spec: '≤18', color: '#e23b2e' },
+      { target: 'B#3', spec: '≤16', color: '#e23b2e' },
+    ],
+    COLD: [
+      { target: 'A#1', spec: '≤19', color: '#3fa0f5' },
+      { target: 'A#2', spec: '≤20', color: '#3fa0f5' },
+      { target: 'B#3', spec: '≤18', color: '#3fa0f5' },
+    ],
+  },
+};
+
 // Sidebar Component
-export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggleCollapse }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ 
+  isCollapsed, 
+  onToggleCollapse,
+  selectedModel = 'PAB',
+  onModelChange
+}) => {
   const pathname = usePathname();
   const [expandedMenus, setExpandedMenus] = React.useState<{[key: string]: boolean}>({});
-  // Changed showSettings to isSettingsExpanded for better clarity as it's now an inline expansion
-  const [isSettingsExpanded, setIsSettingsExpanded] = React.useState(false);
   const [showScrollToTop, setShowScrollToTop] = React.useState(false);
+  const [model, setModel] = React.useState<string>(selectedModel);
 
-  const [fontSizeOpen, setFontSizeOpen] = useState(false);
-  const fontSizeRef = useRef<HTMLDivElement>(null);
   const lastScrollY = useRef(0)
-
-  // User info state
-  const [user, setUser] = React.useState<{ userName: string } | null>(null);
-  const [loading, setLoading] = React.useState(true);
-
-  const [fontSize, setFontSize] = React.useState<string>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("fontSize") || "base";
-    }
-    return "base";
-  });
-
-  const [animationsEnabled, setAnimationsEnabled] = React.useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("animationsEnabled") !== "false";
-    }
-    return true;
-  });
 
   const COLLAPSED_WIDTH = 80
   const [expandedWidth, setExpandedWidth] = React.useState<number>(320)
+
+  // Handle model change
+  const handleModelChange = (newModel: string) => {
+    setModel(newModel);
+    if (onModelChange) {
+      onModelChange(newModel);
+    }
+  };
 
   const getExpandedWidth = (vw: number) => {
     if (vw >= 1600) return 320
@@ -115,117 +152,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggleCollapse 
       behavior: 'smooth'
     });
   };
-
-  // Fetch user info
-  React.useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const res = await fetch("https://alvs-thappdev01:44324/api/UserInfo/current", {
-          credentials: "include",
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setUser(data);
-        } else {
-          setUser(null);
-        }
-      } catch {
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchUser();
-  }, []);
-
-  // เพิ่ม useEffect สำหรับ Font Size dropdown
-  useEffect(() => {
-    const handleClickOutside = (_e: MouseEvent) => {
-      if (fontSizeRef.current && !fontSizeRef.current.contains(_e.target as Node)) {
-        setFontSizeOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  // เพิ่มข้อมูล options สำหรับ Font Size
-  const fontSizeOptions = [
-    { value: "small", label: "Small" },
-    { value: "base", label: "Medium" },
-    { value: "large", label: "Large" }
-  ];
-
-  // Font size effect
-  React.useEffect(() => {
-    const root = document.documentElement;
-    root.classList.remove('text-sm', 'text-base', 'text-lg');
-
-    if (fontSize === 'small') root.classList.add('text-sm');
-    else if (fontSize === 'large') root.classList.add('text-lg');
-    else root.classList.add('text-base');
-    localStorage.setItem("fontSize", fontSize);
-  }, [fontSize]);
-
-  // Animations effect
-  React.useEffect(() => {
-    MotionGlobalConfig.skipAnimations = !animationsEnabled;
-    localStorage.setItem("animationsEnabled", String(animationsEnabled));
-  }, [animationsEnabled]);
-
-  // Switch Color
-  const availableColors = {
-    'blue': '#005496', // corporate blue (default)
-    'gray': '#4e5f6e', // neutral slate
-    'indigo': '#4f46e5', // popular for dashboards
-    'teal': '#0d9488', // clean & modern
-    'amber': '#f59e0b' // warm accent
-  }
-
-  const [primaryColor, setPrimaryColor] = React.useState<string>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("primaryColor") || "#005496"
-    }
-    return "#005496" // default
-  })
-
   
-  React.useEffect(() => {
-    const darkShades: { [key: string]: string } = {
-      '#005496': '#003d73',
-      '#4e5f6e': '#1d252b',
-      '#4f46e5': '#4338ca',
-      '#0d9488': '#0f766e',
-      '#f59e0b': '#b45309'
-    };
-  
-    const lightShades: { [key: string]: string } = {
-      '#005496': '#009EE3', 
-      '#4e5f6e': '#a3b1bc',
-      '#4f46e5': '#818cf8',
-      '#0d9488': '#14b8a6',
-      '#f59e0b': '#fbbf24'
-    };
-    
-    const cleanColor = primaryColor.trim().replace(/^##/, '#');
-    const darkColor = darkShades[cleanColor] || '#003d73';
-    const lightColor = lightShades[cleanColor] || '#b3d9ff';
-
-    document.documentElement.style.setProperty('--primary-color', cleanColor);
-    document.documentElement.style.setProperty('--primary-color-dark', darkColor);
-    document.documentElement.style.setProperty('--primary-color-light', lightColor);
-
-    localStorage.setItem("primaryColor", cleanColor);
-  }, [primaryColor])
-
-  // Menu data with icons
+  // Menu data with icons - แยก Home, Reports, และ Model เป็น menu แยกกัน
   const menuData: SidebarMenuGroup[] = [
     {
       key: 'home',
       label: 'Home',
       icon: HomeIcon,
       items: [
-        { label: 'Dashboard', href: '/', icon: HomeIcon }
+        { label: 'Home', href: '/', icon: HomeIcon }
       ]
     },
     {
@@ -235,25 +170,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggleCollapse 
       items: [
         { label: 'Reports', href: '/reports', icon: ChartBarIcon }
       ]
-    }
+    },
   ]
-
-  const toggleMenu = (key: string) => {
-    if (isCollapsed) {
-      onToggleCollapse();
-      setTimeout(() => {
-        setExpandedMenus({ [key]: true });
-      }, 300);
-    } else {
-      setExpandedMenus(prev => ({
-        ...prev,
-        [key]: !prev[key]
-      }));
-    }
-  };
 
   const isMenuActive = (items: MenuItem[]) => {
     return items.some(item => pathname === item.href);
+  };
+
+  const toggleMenu = (menuKey: string) => {
+    setExpandedMenus(prev => ({
+      ...prev,
+      [menuKey]: !prev[menuKey]
+    }));
   };
 
   return (
@@ -289,9 +217,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggleCollapse 
                     height={24}
                     className="w-15 h-6 flex-shrink-0"
                   />
-                  {/* <div>
-                    <h2 className="text-white font-bold text-lg whitespace-nowrap">RBAC System</h2>
-                  </div> */}
                 </motion.a>
               )}
             </AnimatePresence>
@@ -358,52 +283,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggleCollapse 
           </div>
         </div>
 
-        {/* Title */}
-        {/* <AnimatePresence>
-          {!isCollapsed && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2 }}
-              className="px-4 py-2 border-b border-white/10 overflow-hidden"
-            >
-              <h1 className="text-white/90 font-semibold text-sm uppercase tracking-wider text-center">
-                Application Access Control
-              </h1>
-            </motion.div>
-          )}
-        </AnimatePresence> */}
-
-        {/* User Info */}
-        {/* <div className="p-4 border-b border-white/10">
-          <div className="flex items-center space-x-3 bg-white/10 backdrop-blur-sm rounded-lg px-1.5 py-2">
-            <div className="p-2 bg-white/20 rounded-full flex-shrink-0">
-              <UserIcon className="w-5 h-5 text-white" />
-            </div>
-            <AnimatePresence>
-              {!isCollapsed && (
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  transition={{ duration: 0.2 }}
-                  className="flex-1 min-w-0"
-                >
-                  <p className="text-white font-medium text-sm truncate">
-                    {loading ? "Loading..." : user?.userName || "User"}
-                  </p>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                    <span className="text-white/70 text-xs">Online</span>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </div> */}
-
-
         {/* Navigation */}
         <div className="flex-1 overflow-y-auto no-scrollbar p-4">
           <nav className="space-y-2">
@@ -443,65 +322,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggleCollapse 
                         )}
                       </AnimatePresence>
                     </div>
-
-                    {/* <AnimatePresence>
-                      {!isCollapsed && (
-                        <motion.div
-                          initial={{ opacity: 0, x: 20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: 20 }}
-                          transition={{ duration: 0.2 }}
-                        >
-                          <ChevronRightIcon
-                            className={`w-4 h-4 transition-transform duration-200 ${
-                              isExpanded ? 'rotate-90' : ''
-                            }`}
-                          />
-                        </motion.div>
-                      )}
-                    </AnimatePresence> */}
                   </Link>
-
-                  <AnimatePresence>
-                    {isExpanded && !isCollapsed && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="pl-8 space-y-1">
-                          {menu.items.map((item, index) => {
-                            const isItemActive = pathname === item.href;
-                            return (
-                              <Link
-                                key={index}
-                                href={item.href}
-                                className={`block px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
-                                  isItemActive
-                                    ? 'bg-[var(--primary-color)] text-white shadow-md'
-                                    : 'text-white/70 hover:text-white hover:bg-[var(--primary-color-dark)]'
-                                }`}
-                              >
-                                <div className="flex items-center space-x-2">
-                                  <div className={`w-1.5 h-1.5 rounded-full ${
-                                    isItemActive ? 'bg-white' : 'bg-white/40'
-                                  }`} />
-                                  <span>{item.label}</span>
-                                </div>
-                              </Link>
-                            );
-                          })}
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
                 </div>
               );
             })}
           </nav>
 
+          {/* Model Selector and SPEC Section */}
           <AnimatePresence>
             {!isCollapsed && (
               <motion.div
@@ -511,84 +338,65 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggleCollapse 
                 transition={{ duration: 0.3, delay: 0.1 }}
                 className="mt-4 pt-4 border-t border-white/10"
               >
+                {/* Model Selector */}
+                <div className="px-3 mb-4">
+                  <label className="block text-white font-bold text-xs uppercase tracking-wider mb-2">
+                    Select Model
+                  </label>
+                  <select
+                    value={model}
+                    onChange={(e) => handleModelChange(e.target.value)}
+                    className="w-full text-sm rounded-md bg-white/90 text-gray-900 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-white/40 transition-all duration-200 hover:bg-white"
+                  >
+                    {MODEL_OPTIONS.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+
                 {/* SPEC Title */}
-                <div className="px-3 mb-3">
+                <div className="px-3 mb-3 flex items-center justify-between">
                   <h3 className="text-white font-bold text-xs uppercase tracking-wider">
-                    SPEC
+                    SPEC - {model}
                   </h3>
                 </div>
 
-                {/* Compact Spec Display */}
-                <div className="px-3 space-y-4">
-                  {/* AMBIENT */}
-                  <div>
-                    <div className="text-white/90 font-semibold mb-2 uppercase text-xs tracking-wide">
-                      AMBIENT
+                {/* SPEC Content */}
+                {(() => {
+                  const specs = MODEL_SPECS[model] ?? MODEL_SPECS['PAB']; // fallback
+                  const renderBand = (title: TempBand) => (
+                    <motion.div
+                      key={`${model}-${title}`}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <div className="text-white/90 font-semibold mb-2 uppercase text-xs tracking-wide">{title}</div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {specs[title].map((item, idx) => (
+                          <motion.div
+                            key={`${title}-${idx}`}
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={{ duration: 0.2, delay: idx * 0.05 }}
+                            className="relative rounded-lg px-3 py-2 text-center ring-1 ring-white/20 shadow-[0_10px_18px_rgba(0,0,0,.35)] before:content-[''] before:absolute before:inset-x-0 before:top-0 before:h-1/2 before:rounded-t-lg before:bg-gradient-to-b before:from-white/30 before:to-transparent after:content-[''] after:absolute after:inset-x-0 after:bottom-0 after:h-1/3 after:rounded-b-lg after:bg-gradient-to-t after:from-black/20 after:to-transparent"
+                            style={{ backgroundColor: item.color }}
+                          >
+                            <div className="text-white font-semibold text-sm">{item.target}</div>
+                            <div className="text-white/90 text-xs">{item.spec}ms</div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  );
+                  return (
+                    <div className="px-3 space-y-4">
+                      {renderBand('AMBIENT')}
+                      {renderBand('HOT')}
+                      {renderBand('COLD')}
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { target: "F#1", spec: "≤17" },
-                        { target: "F#2", spec: "≤20" },
-                        { target: "R#3", spec: "≤19" }
-                      ].map((item, idx) => (
-                        <div
-                          key={idx}
-                          className="relative rounded-lg px-3 py-2 text-center ring-1 ring-white/20 shadow-[0_10px_18px_rgba(0,0,0,.35)] before:content-[''] before:absolute before:inset-x-0 before:top-0 before:h-1/2 before:rounded-t-lg before:bg-gradient-to-b before:from-white/30 before:to-transparent after:content-[''] after:absolute after:inset-x-0 after:bottom-0 after:h-1/3 after:rounded-b-lg after:bg-gradient-to-t after:from-black/20 after:to-transparent"
-                          style={{ backgroundColor: "#39c06b" }}
-                        >
-                          <div className="text-white font-semibold text-sm">{item.target}</div>
-                          <div className="text-white/90 text-xs">{item.spec}ms</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* HOT */}
-                  <div>
-                    <div className="text-white/90 font-semibold mb-2 uppercase text-xs tracking-wide">
-                      HOT
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { target: "F#1", spec: "≤17" },
-                        { target: "F#2", spec: "≤20" },
-                        { target: "R#3", spec: "≤19" }
-                      ].map((item, idx) => (
-                        <div
-                          key={idx}
-                          className="relative rounded-lg px-3 py-2 text-center ring-1 ring-white/20 shadow-[0_10px_18px_rgba(0,0,0,.35)] before:content-[''] before:absolute before:inset-x-0 before:top-0 before:h-1/2 before:rounded-t-lg before:bg-gradient-to-b before:from-white/30 before:to-transparent after:content-[''] after:absolute after:inset-x-0 after:bottom-0 after:h-1/3 after:rounded-b-lg after:bg-gradient-to-t after:from-black/20 after:to-transparent"
-                          style={{ backgroundColor: "#e23b2e" }}
-                        >
-                          <div className="text-white font-semibold text-sm">{item.target}</div>
-                          <div className="text-white/90 text-xs">{item.spec}ms</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* COLD */}
-                  <div>
-                    <div className="text-white/90 font-semibold mb-2 uppercase text-xs tracking-wide">
-                      COLD
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      {[
-                        { target: "F#1", spec: "≤21" },
-                        { target: "F#2", spec: "≤22" },
-                        { target: "R#3", spec: "≤20" }
-                      ].map((item, idx) => (
-                        <div
-                          key={idx}
-                          className="relative rounded-lg px-3 py-2 text-center ring-1 ring-white/20 shadow-[0_10px_18px_rgba(0,0,0,.35)] before:content-[''] before:absolute before:inset-x-0 before:top-0 before:h-1/2 before:rounded-t-lg before:bg-gradient-to-b before:from-white/30 before:to-transparent after:content-[''] after:absolute after:inset-x-0 after:bottom-0 after:h-1/3 after:rounded-b-lg after:bg-gradient-to-t after:from-black/20 after:to-transparent"
-                          style={{ backgroundColor: "#3fa0f5" }}
-                        >
-                          <div className="text-white font-semibold text-sm">{item.target}</div>
-                          <div className="text-white/90 text-xs">{item.spec}ms</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+                  );
+                })()}
               </motion.div>
             )}
           </AnimatePresence>
@@ -606,7 +414,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggleCollapse 
             exit={{ opacity: 0, y: 20 }}
             transition={{ duration: 0.3 }}
             onClick={scrollToTop}
-            // --- Positioning and Styling ---
             className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30
                       bg-white px-2 py-1.5 rounded-full shadow-lg hover:shadow-xl
                       transition-all duration-300 hover:scale-105 backdrop-blur-sm border border-white/20
@@ -625,10 +432,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggleCollapse 
 // Hook for managing sidebar state
 export const useSidebar = () => {
   const [isCollapsed, setIsCollapsed] = React.useState(false);
+  const [selectedModel, setSelectedModel] = React.useState('PAB');
 
   const toggle = () => setIsCollapsed(!isCollapsed);
   const collapse = () => setIsCollapsed(true);
   const expand = () => setIsCollapsed(false);
 
-  return { isCollapsed, toggle, collapse, expand };
+  const handleModelChange = (model: string) => {
+    setSelectedModel(model);
+  };
+
+  return { 
+    isCollapsed, 
+    toggle, 
+    collapse, 
+    expand,
+    selectedModel,
+    handleModelChange
+  };
 };

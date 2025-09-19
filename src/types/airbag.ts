@@ -1,13 +1,9 @@
-// สถานะของงานประมวลผล (ตาม Pydantic ProcessingStatus.status)
 export type ProcessingState = "queued" | "processing" | "paused_ng" | "completed" | "error";
 
-// ชนิดอุณหภูมิหลักที่ใช้ในระบบ
 export type TemperatureType = 'room' | 'hot' | 'cold';
 
-// สถานะผลตรวจค่ากับสเปค
 export type ValidationStatus = 'OK' | 'NG' | 'NO_SPEC' | 'NO_DATA';
 
-// ชื่อ parameter ที่ปรากฏในการตรวจสเปค (ตาม fallback_map)
 export type SpecParameter =
   | 'OPENING TIME'
   | 'FRONT#1'
@@ -17,7 +13,7 @@ export type SpecParameter =
 
 // -------- Pydantic models mapping --------
 
-// ProcessingStatus (ref: status fields) 
+// ProcessingStatus
 export interface ProcessingStatus {
   video_name: string;
   status: ProcessingState; // "queued" | "processing" | "completed" | "error"
@@ -29,7 +25,7 @@ export interface ProcessingStatus {
 
 // SpecValidation
 export interface SpecValidation {
-  parameter: string; // ใช้ string เพื่อรองรับข้อความจาก backend ทุกกรณี
+  parameter: string; 
   value?: number | null;
   spec_limit?: number | null;
   status: ValidationStatus;
