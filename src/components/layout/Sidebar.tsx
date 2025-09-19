@@ -12,7 +12,7 @@ import {
 
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
 // Types
 interface MenuItem {
@@ -35,14 +35,23 @@ interface SidebarProps {
   onModelChange?: (model: string) => void;
 }
 
+// KPI Types
+interface KpiOverallStats {
+  total_tests: number;
+  total_pass: number; 
+  total_ng: number;
+  accuracy_avg: number | null;
+  current_queue: number;
+}
+
 type TempBand = 'AMBIENT' | 'HOT' | 'COLD';
 type SpecBox = { target: string; spec: string; color: string };
 type ModelSpec = Record<TempBand, SpecBox[]>;
 
-const MODEL_OPTIONS = ['PAB', 'XYZ']; // เพิ่มโมเดลใหม่ได้ที่นี่
+const MODEL_OPTIONS = ['P703 ICAB DBL', 'Test']; // เพิ่มโมเดลใหม่ได้ที่นี่
 
 const MODEL_SPECS: Record<string, ModelSpec> = {
-  PAB: {
+  'P703 ICAB DBL': {
     AMBIENT: [
       { target: 'F#1', spec: '≤17', color: '#39c06b' },
       { target: 'F#2', spec: '≤20', color: '#39c06b' },
@@ -59,7 +68,7 @@ const MODEL_SPECS: Record<string, ModelSpec> = {
       { target: 'R#3', spec: '≤20', color: '#3fa0f5' },
     ],
   },
-  XYZ: {
+  Test: {
     AMBIENT: [
       { target: 'A#1', spec: '≤15', color: '#39c06b' },
       { target: 'A#2', spec: '≤18', color: '#39c06b' },
@@ -78,22 +87,51 @@ const MODEL_SPECS: Record<string, ModelSpec> = {
   },
 };
 
+// KPI Helper Functions
+function formatInt(n: number): string {
+  return Number.isFinite(n) ? n.toLocaleString() : "—";
+}
+
+function formatPercent(n: number | null | undefined): string {
+  return n == null || Number.isNaN(n) ? "—" : `${n.toFixed(1)}%`;
+}
+
+async function getKpiOverallStats(model: string): Promise<KpiOverallStats> {
+  // จำลอง API call - แทนที่ด้วย actual endpoint
+  const response = await fetch(`/kpi/overall-stats?model=${model}`, {
+    cache: 'no-store'
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Failed to fetch KPI stats: ${response.statusText}`);
+  }
+  
+  return response.json();
+}
+
 // Sidebar Component
 export const Sidebar: React.FC<SidebarProps> = ({ 
   isCollapsed, 
   onToggleCollapse,
-  selectedModel = 'PAB',
+  selectedModel = 'P703 ICAB DBL',
   onModelChange
 }) => {
   const pathname = usePathname();
   const [expandedMenus, setExpandedMenus] = React.useState<{[key: string]: boolean}>({});
   const [showScrollToTop, setShowScrollToTop] = React.useState(false);
   const [model, setModel] = React.useState<string>(selectedModel);
+  
+  // KPI State
+  const [kpiData, setKpiData] = React.useState<KpiOverallStats | null>(null);
+  const [kpiLoading, setKpiLoading] = React.useState(true);
+  const [kpiError, setKpiError] = React.useState<string | null>(null);
 
   const lastScrollY = useRef(0)
 
   const COLLAPSED_WIDTH = 80
   const [expandedWidth, setExpandedWidth] = React.useState<number>(320)
+
+  const [selectOpen, setSelectOpen] = React.useState(false);
 
   // Handle model change
   const handleModelChange = (newModel: string) => {
@@ -102,6 +140,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
       onModelChange(newModel);
     }
   };
+
+  // Fetch KPI data when model changes
+  React.useEffect(() => {
+    if (isCollapsed) return; // Don't fetch when collapsed
+    
+    let mounted = true;
+
+    async function fetchKpiData() {
+      try {
+        setKpiError(null);
+        const data = await getKpiOverallStats(model);
+        
+        if (mounted) {
+          setKpiData(data);
+          setKpiLoading(false);
+        }
+      } catch (err) {
+        if (mounted) {
+          setKpiError(err instanceof Error ? err.message : 'Failed to fetch KPI data');
+          setKpiLoading(false);
+        }
+      }
+    }
+
+    // Initial fetch
+    fetchKpiData();
+
+    // Set up polling interval (30 seconds)
+    const intervalId = window.setInterval(fetchKpiData, 30000);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(intervalId);
+    };
+  }, [model, isCollapsed]);
 
   const getExpandedWidth = (vw: number) => {
     if (vw >= 1600) return 320
@@ -343,27 +416,43 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <label className="block text-white font-bold text-xs uppercase tracking-wider mb-2">
                     Select Model
                   </label>
-                  <select
-                    value={model}
-                    onChange={(e) => handleModelChange(e.target.value)}
-                    className="w-full text-sm rounded-md bg-white/90 text-gray-900 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-white/40 transition-all duration-200 hover:bg-white"
-                  >
-                    {MODEL_OPTIONS.map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
+
+                  <div className="relative">
+                    <select
+                      value={model}
+                      onChange={(e) => handleModelChange(e.target.value)}
+                      onFocus={() => setSelectOpen(true)}
+                      onBlur={() => setSelectOpen(false)}
+                      onMouseDown={() => setSelectOpen((v) => !v)}
+                      className="w-full text-sm rounded-md bg-white/90 text-gray-900 px-3 py-2 pr-9 focus:outline-none focus:ring-2 focus:ring-white/40 transition-all duration-200 hover:bg-white appearance-none"
+                    >
+                      {MODEL_OPTIONS.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+
+                    <motion.span
+                      aria-hidden
+                      className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2"
+                      animate={{ rotate: selectOpen ? 180 : 0 }}
+                      initial={false}
+                      transition={{ type: "tween", duration: 0.18, ease: "easeInOut" }}
+                    >
+                      <ChevronDown className="h-4 w-4 text-gray-700/80" />
+                    </motion.span>
+                  </div>
                 </div>
 
                 {/* SPEC Title */}
-                <div className="px-3 mb-3 flex items-center justify-between">
+                {/* <div className="px-3 mb-3 flex items-center justify-between">
                   <h3 className="text-white font-bold text-xs uppercase tracking-wider">
                     SPEC - {model}
                   </h3>
-                </div>
+                </div> */}
 
                 {/* SPEC Content */}
                 {(() => {
-                  const specs = MODEL_SPECS[model] ?? MODEL_SPECS['PAB']; // fallback
+                  const specs = MODEL_SPECS[model] ?? MODEL_SPECS['P703 ICAB DBL']; // fallback
                   const renderBand = (title: TempBand) => (
                     <motion.div
                       key={`${model}-${title}`}
@@ -397,12 +486,89 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </div>
                   );
                 })()}
+
+                {/* KPI Stats Section */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: 0.2 }}
+                  className="mt-6 pt-4 border-t border-white/10"
+                >
+                  {/* <div className="px-3 mb-3">
+                    <h3 className="text-white font-bold text-xs uppercase tracking-wider">
+                      KPI - {model}
+                    </h3>
+                  </div> */}
+
+                  {kpiLoading ? (
+                    <div className="px-3 space-y-3">
+                      {Array.from({ length: 3 }, (_, i) => (
+                        <div key={i} className="animate-pulse">
+                          <div className="bg-white/10 rounded-lg p-3">
+                            <div className="h-4 bg-white/20 rounded mb-2"></div>
+                            <div className="h-6 bg-white/20 rounded"></div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : kpiError ? (
+                    <div className="px-3">
+                      <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-3">
+                        <div className="text-red-300 text-xs">
+                          Error loading KPI data
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="px-3 grid grid-cols-1 gap-3">
+                      {[
+                        {
+                          label: "TOTAL IN SPEC",
+                          value: formatInt(kpiData?.total_pass ?? 0),
+                          bgColor: "bg-emerald-500/20",
+                          borderColor: "border-emerald-500/30",
+                          textColor: "text-emerald-300",
+                          valueColor: "text-white"
+                        },
+                        {
+                          label: "TOTAL OUT OF SPEC",
+                          value: formatInt(kpiData?.total_ng ?? 0),
+                          bgColor: "bg-rose-500/20",
+                          borderColor: "border-rose-500/30",
+                          textColor: "text-rose-300",
+                          valueColor: "text-white"
+                        },
+                        {
+                          label: "TOTAL RELIABILITY RATE",
+                          value: formatPercent(kpiData?.accuracy_avg),
+                          bgColor: "bg-violet-500/20",
+                          borderColor: "border-violet-500/30",
+                          textColor: "text-violet-300",
+                          valueColor: "text-white"
+                        }
+                      ].map((item, idx) => (
+                        <motion.div
+                          key={item.label}
+                          initial={{ scale: 0.95, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          transition={{ duration: 0.2, delay: idx * 0.05 }}
+                          className={`${item.bgColor} ${item.borderColor} border rounded-lg p-4`}
+                        >
+                          <div className={`${item.textColor} text-[10px] font-medium uppercase tracking-wider mb-2 text-center`}>
+                            {item.label}
+                          </div>
+                          <div className={`${item.valueColor} font-bold text-3xl tabular-nums leading-none text-center`}>
+                            {item.value}
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  )}
+                </motion.div>
               </motion.div>
             )}
           </AnimatePresence>
         </div>
-
-        
       </motion.aside>
 
       {/* Scroll to Top Button */}
@@ -432,7 +598,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 // Hook for managing sidebar state
 export const useSidebar = () => {
   const [isCollapsed, setIsCollapsed] = React.useState(false);
-  const [selectedModel, setSelectedModel] = React.useState('PAB');
+  const [selectedModel, setSelectedModel] = React.useState('P703 ICAB DBL');
 
   const toggle = () => setIsCollapsed(!isCollapsed);
   const collapse = () => setIsCollapsed(true);

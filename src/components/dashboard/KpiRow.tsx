@@ -188,16 +188,6 @@ export default function KpiRow({
           <div className={`pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-[.06] bg-gradient-to-br ${gradient}`} />
         </div>
       ))}
-      
-      {/* Data freshness indicator */}
-      {/* {kpiData && (
-        <div className="col-span-full flex justify-center mt-2">
-          <div className="text-xs text-slate-500 flex items-center gap-1">
-            <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-            Data from database (refreshes every {Math.floor(refreshInterval / 1000)}s)
-          </div>
-        </div>
-      )} */}
     </section>
   );
 }
