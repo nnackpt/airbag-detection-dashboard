@@ -13,7 +13,7 @@ import {
   TestResultWithDetails,
 } from "@/types/report";
 import { AlertCircle, CheckCircle, Eye, Filter, XCircle } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 function formatISODate(d: Date): string {
   const tzOffsetMs = d.getTimezoneOffset() * 60 * 1000; // why: ให้ yyyy-mm-dd ตรงเขตเวลาเครื่อง
@@ -78,38 +78,66 @@ export default function Reports() {
 
   const isResetDisabled = useMemo<boolean>(
     () => isFiltersDefault(filters, pageSize),
-    [filters]
+    [filters, pageSize]
   );
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  const loadData = useCallback(
+    async (
+      overrideFilters?: Partial<ReportsFilter>,
+      overridePage?: number
+    ) => {
+      try {
+        setLoading(true);
+        setError(null);
 
-      const [resultsResponse, statsResponse] = await Promise.all([
-        getTestResults({ ...filters, page: currentPage, page_size: pageSize }),
-        getReportsStatistics(filters.start_date || "", filters.end_date || ""),
-      ]);
+        const mergedFilters: Partial<ReportsFilter> = {
+          ...filters,
+          ...(overrideFilters ?? {}),
+        };
 
-      setResults(resultsResponse.data);
-      setTotalPages(resultsResponse.total_pages);
-      setTotalResults(resultsResponse.total);
-      setStatistics(statsResponse);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load reports");
-    } finally {
-      setLoading(false);
-    }
-  };
+        const page = Math.max(
+          1,
+          overridePage ?? overrideFilters?.page ?? currentPage
+        );
+
+        const effective: ReportsFilter = {
+          start_date: mergedFilters.start_date || "",
+          end_date: mergedFilters.end_date || "",
+          model_name: mergedFilters.model_name || undefined,
+          overall_result: mergedFilters.overall_result || undefined,
+          serial_number: mergedFilters.serial_number || undefined,
+          cop_no: mergedFilters.cop_no || undefined,
+          page,
+          page_size: pageSize,
+        };
+
+        const [resultsResponse, statsResponse] = await Promise.all([
+          getTestResults(effective),
+          getReportsStatistics(
+            effective.start_date || "",
+            effective.end_date || ""
+          ),
+        ]);
+
+        setResults(resultsResponse.data);
+        setTotalPages(resultsResponse.total_pages);
+        setTotalResults(resultsResponse.total);
+        setStatistics(statsResponse);
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Failed to load reports"
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [filters, currentPage, pageSize]
+  );
+
 
   const handleFilterChange = (newFilters: Partial<ReportsFilter>) => {
     setFilters((prev) => ({ ...prev, ...newFilters }));
     setCurrentPage(1); // Reset to first page when filtering
-  };
-
-  const handleApplyFilters = () => {
-    setCurrentPage(1);
-    loadData();
   };
 
   const handleViewDetails = async (resultId: number) => {
@@ -132,7 +160,7 @@ export default function Reports() {
 
     try {
       await deleteTestResult(resultId);
-      loadData(); // Refresh the list
+      await loadData(); // Refresh the list
     } catch (err) {
       alert(
         "Failed to delete: " +
@@ -142,8 +170,8 @@ export default function Reports() {
   };
 
   useEffect(() => {
-    loadData();
-  }, [currentPage]);
+    void loadData();
+  }, [loadData]);
 
   const getResultStatusIcon = (result?: string | null) => {
     switch (result) {
@@ -179,50 +207,12 @@ export default function Reports() {
     }
   };
 
-  async function loadDataWithOverride(
-    f: Partial<ReportsFilter>,
-    page: number
-  ): Promise<void> {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const effective: ReportsFilter = {
-        start_date: f.start_date || "",
-        end_date: f.end_date || "",
-        model_name: f.model_name || undefined,
-        overall_result: f.overall_result,
-        serial_number: f.serial_number,
-        cop_no: f.cop_no,
-        page,
-        page_size: pageSize,
-      };
-
-      const [resultsResponse, statsResponse] = await Promise.all([
-        getTestResults(effective),
-        getReportsStatistics(
-          effective.start_date || "",
-          effective.end_date || ""
-        ),
-      ]);
-
-      setResults(resultsResponse.data);
-      setTotalPages(resultsResponse.total_pages);
-      setTotalResults(resultsResponse.total);
-      setStatistics(statsResponse);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load reports");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleResetFilters(): Promise<void> {
+  const handleResetFilters = useCallback(async (): Promise<void> => {
     const df = makeDefaultFilters(pageSize);
     setFilters(df);
     setCurrentPage(1);
-    await loadDataWithOverride(df, 1);
-  }
+    await loadData(df, 1);
+  }, [loadData, pageSize]);
 
   if (loading && results.length === 0) {
     return (
@@ -422,12 +412,6 @@ export default function Reports() {
                 Reset
               </button>
 
-              <button
-                onClick={handleApplyFilters}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer"
-              >
-                Apply Filters
-              </button>
             </div>
           </div>
         )}
@@ -732,3 +716,12 @@ export default function Reports() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+

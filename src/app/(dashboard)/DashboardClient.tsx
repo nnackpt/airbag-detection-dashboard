@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import Topbar from "@/components/dashboard/Topbar";
+import KpiRow from "@/components/dashboard/KpiRow";
 import ProcessingStatusBox from "@/components/dashboard/ProcessingStatus";
 import ResultsTable from "@/components/dashboard/ResultsTable";
 import NgAlertModal from "@/components/dashboard/NgAlertModal";
+import StatCard from "@/components/dashboard/StatusCard";
 
 import {
   continueAfterNg,
@@ -47,6 +49,14 @@ type AccuracySummary = { accuracy_avg: number | null; count: number } | null;
 
 type TimestampValue = string | number | Date | null | undefined;
 
+type SummaryData = {
+  model: string;
+  inSpec: "OK" | "NG" | null;
+  reliability: number | null;
+};
+
+const DEFAULT_MODEL = "PAB";
+
 const normalizeList = <T,>(input: unknown): T[] => {
   if (Array.isArray(input)) return input as T[];
   if (input && typeof input === "object" && "items" in input) {
@@ -72,6 +82,49 @@ const pickActive = (list: ProcessingStatusType[]): ProcessingStatusType | null =
   return by("processing") ?? by("queued") ?? null;
 };
 
+const deriveSummary = (result: ExtendedProcessingResult | null | undefined): SummaryData => {
+  const modelCandidate = result?.model ?? result?.model_name ?? result?.modelId;
+  const model = typeof modelCandidate === "string" && modelCandidate.trim() ? modelCandidate : DEFAULT_MODEL;
+
+  if (!result) {
+    return { model, inSpec: null, reliability: null };
+  }
+
+  let inSpec: "OK" | "NG" | null = null;
+  if (typeof result.in_spec === "boolean") inSpec = result.in_spec ? "OK" : "NG";
+  else if (typeof result.inSpec === "boolean") inSpec = result.inSpec ? "OK" : "NG";
+  else {
+    const raw = result.inSpec ?? result.result ?? result.status;
+    if (typeof raw === "string") {
+      const upper = raw.toUpperCase();
+      if (upper.includes("OK")) inSpec = "OK";
+      else if (upper.includes("NG") || upper.includes("FAIL") || upper.includes("OUT")) inSpec = "NG";
+    }
+  }
+
+  const reliabilityCandidate =
+    typeof result.accuracy === "number"
+      ? result.accuracy
+      : typeof result.accuracy_rate === "number"
+      ? result.accuracy_rate
+      : typeof result.reliability === "number"
+      ? result.reliability
+      : null;
+
+  let reliability: number | null = null;
+  if (reliabilityCandidate != null && !Number.isNaN(reliabilityCandidate)) {
+    const normalized =
+      reliabilityCandidate > 1 && reliabilityCandidate <= 100
+        ? reliabilityCandidate
+        : reliabilityCandidate <= 1
+        ? reliabilityCandidate * 100
+        : reliabilityCandidate;
+    reliability = Math.max(0, Math.min(100, normalized));
+  }
+
+  return { model, inSpec, reliability };
+};
+
 const isNgResult = (result: ExtendedProcessingResult): boolean => {
   if (typeof result.is_ng === "boolean") return result.is_ng;
   if (typeof result.ng === "boolean") return result.ng;
@@ -84,6 +137,64 @@ const isNgResult = (result: ExtendedProcessingResult): boolean => {
   }
   return false;
 };
+
+interface ProcessingSummaryCardProps {
+  model: string;
+  inSpec: "OK" | "NG" | null;
+  reliability: number | null;
+  loading: boolean;
+}
+
+const formatPercent = (value: number | null): string => {
+  if (value == null || Number.isNaN(value)) return "N/A";
+  return `${value.toFixed(2)}%`;
+};
+
+function ProcessingSummaryCard({ model, inSpec, reliability, loading }: ProcessingSummaryCardProps) {
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-1 items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Model</span>
+          {loading ? (
+            <span className="h-4 w-32 animate-pulse rounded bg-slate-200" />
+          ) : (
+            <span className="text-base font-semibold text-slate-900">{model}</span>
+          )}
+        </div>
+        <div className="flex flex-1 items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">In Spec</span>
+          {loading ? (
+            <span className="h-6 w-16 animate-pulse rounded-full bg-slate-200" />
+          ) : inSpec ? (
+            <span
+              className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
+                inSpec === "OK"
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-rose-100 text-rose-700"
+              }`}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${inSpec === "OK" ? "bg-emerald-500" : "bg-rose-500"}`}
+              />
+              {inSpec}
+            </span>
+          ) : (
+            <span className="text-sm text-slate-400">?????????????</span>
+          )}
+        </div>
+        <div className="flex flex-1 items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reliability</span>
+          {loading ? (
+            <span className="h-4 w-20 animate-pulse rounded bg-slate-200" />
+          ) : (
+            <span className="text-base font-semibold text-slate-900">{formatPercent(reliability)}</span>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
 
 export default function DashboardClient() {
   const [systemStatus, setSystemStatus] = useState<SystemStats | null>(null);
@@ -141,43 +252,20 @@ export default function DashboardClient() {
     return sorted[0] ?? null;
   }, [results]);
 
-  const cardModel = useMemo(() => {
-    const name = latestResult?.model ?? latestResult?.model_name ?? latestResult?.modelId;
-    return typeof name === "string" && name.trim() ? name : "P703 ICAB DBL";
-  }, [latestResult]);
-
-  const cardInSpec = useMemo<"OK" | "NG" | null>(() => {
-    if (!latestResult) return null;
-
-    if (typeof latestResult.in_spec === "boolean") return latestResult.in_spec ? "OK" : "NG";
-    if (typeof latestResult.inSpec === "boolean") return latestResult.inSpec ? "OK" : "NG";
-
-    const raw = latestResult.inSpec ?? latestResult.result ?? latestResult.status;
-    if (typeof raw === "string") {
-      const upper = raw.toUpperCase();
-      if (upper.includes("OK")) return "OK";
-      if (upper.includes("NG") || upper.includes("FAIL") || upper.includes("OUT")) return "NG";
-    }
-    return null;
-  }, [latestResult]);
-
-  const cardReliability = useMemo<number | null>(() => {
-    if (!latestResult) return null;
-    const candidate =
-      typeof latestResult.accuracy === "number"
-        ? latestResult.accuracy
-        : typeof latestResult.accuracy_rate === "number"
-        ? latestResult.accuracy_rate
-        : typeof latestResult.reliability === "number"
-        ? latestResult.reliability
-        : null;
-
-    if (candidate == null || Number.isNaN(candidate)) return null;
-    const normalized = candidate > 1 && candidate <= 100 ? candidate : candidate <= 1 ? candidate * 100 : candidate;
-    return Math.max(0, Math.min(100, normalized));
-  }, [latestResult]);
-
   const activeProcessing = useMemo(() => pickActive(processingList), [processingList]);
+
+  const activeResult = useMemo(() => {
+    if (!activeProcessing?.video_name) return null;
+    return results.find((entry) => entry.video_name === activeProcessing.video_name) ?? null;
+  }, [activeProcessing, results]);
+
+  const latestSummary = useMemo(() => deriveSummary(latestResult), [latestResult]);
+  const activeSummary = useMemo(
+    () => deriveSummary(activeResult ?? latestResult),
+    [activeResult, latestResult]
+  );
+
+  const activeSummaryLoading = loading && !!activeProcessing && !activeResult;
 
   const kpiValues = useMemo(() => {
     const queue = systemStatus?.videos_in_queue ?? 0;
@@ -222,11 +310,17 @@ export default function DashboardClient() {
           completed={kpiValues.completed}
           ngDetected={kpiValues.ngDetected}
           accuracyRateAvg={kpiValues.accuracyRateAvg}
+        /> */}
+        <ProcessingSummaryCard
+          model={activeSummary.model}
+          inSpec={activeSummary.inSpec}
+          reliability={activeSummary.reliability}
+          loading={activeSummaryLoading}
         />
-        <StatCard
-          model={cardModel}
-          inSpec={cardInSpec ?? undefined}
-          reliability={cardReliability}
+        {/* <StatCard
+          model={latestSummary.model}
+          inSpec={latestSummary.inSpec ?? undefined}
+          reliability={latestSummary.reliability}
           loading={loading && !latestResult}
           className="w-full"
         /> */}
