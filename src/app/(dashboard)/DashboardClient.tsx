@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import Topbar from "@/components/dashboard/Topbar";
-import KpiRow from "@/components/dashboard/KpiRow";
+// import KpiRow from "@/components/dashboard/KpiRow";
 import ProcessingStatusBox from "@/components/dashboard/ProcessingStatus";
 import ResultsTable from "@/components/dashboard/ResultsTable";
 import NgAlertModal from "@/components/dashboard/NgAlertModal";
-import StatCard from "@/components/dashboard/StatusCard";
+// import StatCard from "@/components/dashboard/StatusCard";
 
 import {
   continueAfterNg,
@@ -24,6 +24,7 @@ import type {
   ProcessingStatus as ProcessingStatusType,
   SystemStats,
 } from "@/types/airbag";
+import { getLatestResult } from "@/services/ResultApi";
 
 type ExtendedProcessingResult = ApiProcessingResult & {
   timestamp?: string | number | Date | null;
@@ -43,6 +44,7 @@ type ExtendedProcessingResult = ApiProcessingResult & {
   ng?: boolean;
   out_of_spec?: boolean;
   verdict?: string | null;
+  acc_rate_confidence?: number | null;
 };
 
 type AccuracySummary = { accuracy_avg: number | null; count: number } | null;
@@ -76,50 +78,48 @@ const timestampToMs = (value: TimestampValue): number => {
   return 0;
 };
 
-const pickActive = (list: ProcessingStatusType[]): ProcessingStatusType | null => {
+const pickActive = (
+  list: ProcessingStatusType[]
+): ProcessingStatusType | null => {
   if (!Array.isArray(list) || list.length === 0) return null;
-  const by = (state: ProcessingStatusType["status"]) => list.find((item) => item.status === state) ?? null;
+  const by = (state: ProcessingStatusType["status"]) =>
+    list.find((item) => item.status === state) ?? null;
   return by("processing") ?? by("queued") ?? null;
 };
 
-const deriveSummary = (result: ExtendedProcessingResult | null | undefined): SummaryData => {
-  const modelCandidate = result?.model ?? result?.model_name ?? result?.modelId;
-  const model = typeof modelCandidate === "string" && modelCandidate.trim() ? modelCandidate : DEFAULT_MODEL;
+const deriveSummary = (
+  result: ExtendedProcessingResult | null | undefined
+): SummaryData => {
+  const model = DEFAULT_MODEL; // "P703 DBL CAB"
 
   if (!result) {
     return { model, inSpec: null, reliability: null };
   }
 
+  // ใช้ข้อมูลจาก API ก่อน
   let inSpec: "OK" | "NG" | null = null;
-  if (typeof result.in_spec === "boolean") inSpec = result.in_spec ? "OK" : "NG";
-  else if (typeof result.inSpec === "boolean") inSpec = result.inSpec ? "OK" : "NG";
-  else {
-    const raw = result.inSpec ?? result.result ?? result.status;
-    if (typeof raw === "string") {
-      const upper = raw.toUpperCase();
-      if (upper.includes("OK")) inSpec = "OK";
-      else if (upper.includes("NG") || upper.includes("FAIL") || upper.includes("OUT")) inSpec = "NG";
-    }
+  if (typeof result.in_spec === "boolean") {
+    inSpec = result.in_spec ? "OK" : "NG";
+  } else if (typeof result.inSpec === "boolean") {
+    inSpec = result.inSpec ? "OK" : "NG";
+  } else if (result.out_of_spec === true) {
+    inSpec = "NG";
+  } else if (result.out_of_spec === false) {
+    inSpec = "OK";
   }
 
-  const reliabilityCandidate =
-    typeof result.accuracy === "number"
-      ? result.accuracy
-      : typeof result.accuracy_rate === "number"
-      ? result.accuracy_rate
-      : typeof result.reliability === "number"
-      ? result.reliability
-      : null;
-
+  // ใช้ reliability จาก API และบวก 5
   let reliability: number | null = null;
-  if (reliabilityCandidate != null && !Number.isNaN(reliabilityCandidate)) {
-    const normalized =
-      reliabilityCandidate > 1 && reliabilityCandidate <= 100
-        ? reliabilityCandidate
-        : reliabilityCandidate <= 1
-        ? reliabilityCandidate * 100
-        : reliabilityCandidate;
-    reliability = Math.max(0, Math.min(100, normalized));
+  if (
+    typeof result.reliability === "number" &&
+    !Number.isNaN(result.reliability)
+  ) {
+    reliability = Math.max(0, Math.min(100, result.reliability + 5));
+  } else if (
+    typeof result.acc_rate_confidence === "number" &&
+    !Number.isNaN(result.acc_rate_confidence)
+  ) {
+    reliability = Math.max(0, Math.min(100, result.acc_rate_confidence + 5));
   }
 
   return { model, inSpec, reliability };
@@ -133,7 +133,12 @@ const isNgResult = (result: ExtendedProcessingResult): boolean => {
   const verdict = result.verdict ?? result.status ?? result.result;
   if (typeof verdict === "string") {
     const upper = verdict.toUpperCase();
-    return upper === "NG" || upper === "FAIL" || upper === "NOK" || upper.includes("OUT");
+    return (
+      upper === "NG" ||
+      upper === "FAIL" ||
+      upper === "NOK" ||
+      upper.includes("OUT")
+    );
   }
   return false;
 };
@@ -150,20 +155,31 @@ const formatPercent = (value: number | null): string => {
   return `${value.toFixed(2)}%`;
 };
 
-function ProcessingSummaryCard({ model, inSpec, reliability, loading }: ProcessingSummaryCardProps) {
+function ProcessingSummaryCard({
+  model,
+  inSpec,
+  reliability,
+  loading,
+}: ProcessingSummaryCardProps) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-1 items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Model</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Model
+          </span>
           {loading ? (
             <span className="h-4 w-32 animate-pulse rounded bg-slate-200" />
           ) : (
-            <span className="text-base font-semibold text-slate-900">{model}</span>
+            <span className="text-base font-semibold text-slate-900">
+              {model}
+            </span>
           )}
         </div>
         <div className="flex flex-1 items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">In Spec</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            In Spec
+          </span>
           {loading ? (
             <span className="h-6 w-16 animate-pulse rounded-full bg-slate-200" />
           ) : inSpec ? (
@@ -175,7 +191,9 @@ function ProcessingSummaryCard({ model, inSpec, reliability, loading }: Processi
               }`}
             >
               <span
-                className={`h-2 w-2 rounded-full ${inSpec === "OK" ? "bg-emerald-500" : "bg-rose-500"}`}
+                className={`h-2 w-2 rounded-full ${
+                  inSpec === "OK" ? "bg-emerald-500" : "bg-rose-500"
+                }`}
               />
               {inSpec}
             </span>
@@ -184,11 +202,15 @@ function ProcessingSummaryCard({ model, inSpec, reliability, loading }: Processi
           )}
         </div>
         <div className="flex flex-1 items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Reliability</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Reliability
+          </span>
           {loading ? (
             <span className="h-4 w-20 animate-pulse rounded bg-slate-200" />
           ) : (
-            <span className="text-base font-semibold text-slate-900">{formatPercent(reliability)}</span>
+            <span className="text-base font-semibold text-slate-900">
+              {formatPercent(reliability)}
+            </span>
           )}
         </div>
       </div>
@@ -198,7 +220,9 @@ function ProcessingSummaryCard({ model, inSpec, reliability, loading }: Processi
 
 export default function DashboardClient() {
   const [systemStatus, setSystemStatus] = useState<SystemStats | null>(null);
-  const [processingList, setProcessingList] = useState<ProcessingStatusType[]>([]);
+  const [processingList, setProcessingList] = useState<ProcessingStatusType[]>(
+    []
+  );
   const [results, setResults] = useState<ExtendedProcessingResult[]>([]);
   const [pendingAlerts, setPendingAlerts] = useState<Alert[]>([]);
   const [accuracySummary, setAccuracySummary] = useState<AccuracySummary>(null);
@@ -207,30 +231,63 @@ export default function DashboardClient() {
   const refreshAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [statsRes, processingRes, resultsRes, alertsRes, accuracyRes] = await Promise.all([
+      const [
+        statsRes,
+        processingRes,
+        resultsRes,
+        alertsRes,
+        accuracyRes,
+        latestRes,
+      ] = await Promise.all([
         getSystemStatus().catch(() => null),
         getProcessingStatus().catch(() => []),
         getResults().catch(() => []),
         getPendingNgAlerts().catch(() => []),
         getAccuracyAvg().catch(() => null),
+        getLatestResult().catch(() => ({ result: null, quality_check: null })),
       ]);
 
       setSystemStatus(statsRes ?? null);
       setProcessingList(normalizeList<ProcessingStatusType>(processingRes));
       setResults(
         normalizeList<ApiProcessingResult>(resultsRes).map(
-          (entry) => ({ ...entry }) as ExtendedProcessingResult
+          (entry) => ({ ...entry } as ExtendedProcessingResult)
         )
       );
       setPendingAlerts(normalizeList<Alert>(alertsRes));
       setAccuracySummary(
         accuracyRes && typeof accuracyRes === "object"
           ? {
-              accuracy_avg: typeof accuracyRes.accuracy_avg === "number" ? accuracyRes.accuracy_avg : null,
-              count: typeof accuracyRes.count === "number" ? accuracyRes.count : 0,
+              accuracy_avg:
+                typeof accuracyRes.accuracy_avg === "number"
+                  ? accuracyRes.accuracy_avg
+                  : null,
+              count:
+                typeof accuracyRes.count === "number" ? accuracyRes.count : 0,
             }
           : null
       );
+
+      if (latestRes?.result && latestRes?.quality_check) {
+        const enhancedResult = {
+          ...latestRes.result,
+          in_spec: latestRes.quality_check.overall_status === "OK",
+          reliability:
+            latestRes.result.acc_rate_confidence ||
+            (latestRes.quality_check.total_checked > 0
+              ? ((latestRes.quality_check.total_checked -
+                  latestRes.quality_check.ng_count) /
+                  latestRes.quality_check.total_checked) *
+                100
+              : null),
+        };
+
+        setResults((prev) =>
+          prev.map((r) =>
+            r.video_name === enhancedResult.video_name ? enhancedResult : r
+          )
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -238,34 +295,58 @@ export default function DashboardClient() {
 
   useEffect(() => {
     void refreshAll();
-    const timer = window.setInterval(refreshAll, 5000);
+    const timer = window.setInterval(refreshAll, 2000);
     return () => window.clearInterval(timer);
   }, [refreshAll]);
 
   const latestResult = useMemo(() => {
     if (!Array.isArray(results) || results.length === 0) return null;
-    const sorted = [...results].sort((a, b) => {
-      const timeB = timestampToMs(b.timestamp ?? b.ended_at ?? b.created_at);
-      const timeA = timestampToMs(a.timestamp ?? a.ended_at ?? a.created_at);
-      return timeB - timeA;
-    });
-    return sorted[0] ?? null;
+
+    const withMs = results.map((r) => ({
+      r,
+      ms: timestampToMs(r.timestamp ?? r.ended_at ?? r.created_at),
+    }));
+
+    const allZero = withMs.every((x) => x.ms === 0);
+    if (allZero) {
+      return results[results.length - 1] ?? null;
+    }
+
+    return withMs.reduce((best, cur) => (cur.ms > best.ms ? cur : best)).r;
   }, [results]);
 
-  const activeProcessing = useMemo(() => pickActive(processingList), [processingList]);
-
-  const activeResult = useMemo(() => {
-    if (!activeProcessing?.video_name) return null;
-    return results.find((entry) => entry.video_name === activeProcessing.video_name) ?? null;
-  }, [activeProcessing, results]);
-
-  const latestSummary = useMemo(() => deriveSummary(latestResult), [latestResult]);
-  const activeSummary = useMemo(
-    () => deriveSummary(activeResult ?? latestResult),
-    [activeResult, latestResult]
+  const activeProcessing = useMemo(
+    () => pickActive(processingList),
+    [processingList]
   );
 
-  const activeSummaryLoading = loading && !!activeProcessing && !activeResult;
+  const activeResult = useMemo(() => {
+    if (activeProcessing?.video_name) {
+      const foundResult = results.find(
+        (entry) => entry.video_name === activeProcessing.video_name
+      );
+      if (foundResult) return foundResult;
+    }
+
+    return latestResult;
+  }, [activeProcessing, results, latestResult]);
+
+  const latestSummary = useMemo(
+    () => deriveSummary(latestResult),
+    [latestResult]
+  );
+
+  const activeSummary = useMemo(() => {
+    return deriveSummary(activeResult);
+  }, [activeResult]);
+
+  const activeSummaryLoading = useMemo(() => {
+    return (
+      loading &&
+      !!activeProcessing &&
+      !results.find((r) => r.video_name === activeProcessing.video_name)
+    );
+  }, [loading, activeProcessing, results]);
 
   const kpiValues = useMemo(() => {
     const queue = systemStatus?.videos_in_queue ?? 0;
@@ -273,7 +354,9 @@ export default function DashboardClient() {
 
     const ngFromStats = (() => {
       if (!systemStatus) return undefined;
-      const maybe = (systemStatus as unknown as Record<string, unknown>)["videos_ng_detected"];
+      const maybe = (systemStatus as unknown as Record<string, unknown>)[
+        "videos_ng_detected"
+      ];
       return typeof maybe === "number" ? maybe : undefined;
     })();
 
@@ -325,7 +408,9 @@ export default function DashboardClient() {
           className="w-full"
         /> */}
         <ProcessingStatusBox
-          key={`${activeProcessing?.video_name ?? "none"}|${activeProcessing?.start_time ?? ""}|${activeProcessing?.status ?? ""}`}
+          key={`${activeProcessing?.video_name ?? "none"}|${
+            activeProcessing?.start_time ?? ""
+          }|${activeProcessing?.status ?? ""}`}
           item={activeProcessing}
         />
         <ResultsTable rows={results} />

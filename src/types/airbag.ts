@@ -67,6 +67,7 @@ export interface ProcessingResult {
   fr1_hit_frame?: number | null;
   fr2_hit_frame?: number | null;
   re3_hit_frame?: number | null;
+  reliability?: number;
 
   explosion_time_ms: string;        // backend ส่งเป็น string
   fr1_hit_time_ms: string;

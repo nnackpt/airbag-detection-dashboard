@@ -1,5 +1,3 @@
-// File: src/components/dashboard/ResultsTable.tsx
-
 "use client";
 
 import { ProcessingResult } from "@/types/airbag";
@@ -27,6 +25,7 @@ function toExcelRow(r: ProcessingResult): ExcelRow {
     "FRONT#2 (ms)": r.fr2_hit_time_ms ?? null,
     "REAR#3 (ms)": r.re3_hit_time_ms ?? null,
     "Full inflator time (ms)": r.full_deployment_time_ms ?? null,
+    "Reliability": r.reliability ?? "",
     COMMENTS: r.error ?? "",
     Temperature: String(r.temperature_type ?? "").toUpperCase(),
   };
@@ -91,6 +90,7 @@ export default function ResultsTable({ rows }: ResultsTableProps) {
                 "FRONT#2",
                 "REAR#3",
                 "Full inflator time",
+                "Reliability",
                 "COMMENTS",
                 "Temperature",
                 "Excel",
@@ -114,6 +114,7 @@ export default function ResultsTable({ rows }: ResultsTableProps) {
                   <td className={numberCellClasses}>{r.fr2_hit_time_ms}</td>
                   <td className={numberCellClasses}>{r.re3_hit_time_ms}</td>
                   <td className={numberCellClasses}>{r.full_deployment_time_ms}</td>
+                  <td className={numberCellClasses}>{r.reliability ?? ""}</td>
                   <td className={bodyCellClasses}>{r.error ?? ""}</td>
                   <td className={bodyCellClasses}>{String(r.temperature_type).toUpperCase()}</td>
                   <td className={`${bodyCellClasses} whitespace-nowrap`}>

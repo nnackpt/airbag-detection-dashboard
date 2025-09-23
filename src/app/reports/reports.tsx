@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  deleteTestResult,
+  // deleteTestResult,
   getReportsStatistics,
   getTestResultDetails,
   getTestResults,
@@ -12,11 +12,18 @@ import {
   TestResultSummary,
   TestResultWithDetails,
 } from "@/types/report";
-import { AlertCircle, CheckCircle, Eye, Filter, XCircle } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle,
+  Download,
+  Eye,
+  Filter,
+  XCircle,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 function formatISODate(d: Date): string {
-  const tzOffsetMs = d.getTimezoneOffset() * 60 * 1000; // why: ให้ yyyy-mm-dd ตรงเขตเวลาเครื่อง
+  const tzOffsetMs = d.getTimezoneOffset() * 60 * 1000;
   const local = new Date(d.getTime() - tzOffsetMs);
   return local.toISOString().split("T")[0];
 }
@@ -82,10 +89,7 @@ export default function Reports() {
   );
 
   const loadData = useCallback(
-    async (
-      overrideFilters?: Partial<ReportsFilter>,
-      overridePage?: number
-    ) => {
+    async (overrideFilters?: Partial<ReportsFilter>, overridePage?: number) => {
       try {
         setLoading(true);
         setError(null);
@@ -124,16 +128,13 @@ export default function Reports() {
         setTotalResults(resultsResponse.total);
         setStatistics(statsResponse);
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to load reports"
-        );
+        setError(err instanceof Error ? err.message : "Failed to load reports");
       } finally {
         setLoading(false);
       }
     },
     [filters, currentPage, pageSize]
   );
-
 
   const handleFilterChange = (newFilters: Partial<ReportsFilter>) => {
     setFilters((prev) => ({ ...prev, ...newFilters }));
@@ -153,21 +154,99 @@ export default function Reports() {
     }
   };
 
-  const handleDelete = async (resultId: number) => {
-    if (!confirm("Are you sure you want to delete this test result?")) {
-      return;
-    }
-
+  const handleDownload = async (resultId: number) => {
     try {
-      await deleteTestResult(resultId);
-      await loadData(); // Refresh the list
+      const d = await getTestResultDetails(resultId);
+
+      // Header + summary
+      const lines: string[] = [];
+      const esc = (v: unknown) => `"${String(v ?? "").replaceAll('"', '""')}"`; 
+
+      lines.push("Summary");
+      lines.push(
+        [
+          "Test ID",
+          "Model",
+          "Serial Number",
+          "COP No",
+          "Test Date",
+          "Overall",
+          "Reliability (%)",
+          "Comment",
+        ]
+          .map(esc)
+          .join(",")
+      );
+      lines.push(
+        [
+          d.ai_model_id,
+          d.model_name,
+          d.serial_number || "",
+          d.cop_no || "",
+          d.test_date ? new Date(d.test_date).toLocaleString() : "",
+          d.overall_result || "",
+          d.accuracy_rate ?? "",
+          d.comment || "",
+        ]
+          .map(esc)
+          .join(",")
+      );
+
+      // Blank line as section break
+      lines.push("");
+      lines.push("Measurement Details");
+      lines.push(
+        ["Parameter", "Measured (ms)", "Target (ms)", "Result"]
+          .map(esc)
+          .join(",")
+      );
+      for (const row of d.details) {
+        lines.push(
+          [
+            row.point_name,
+            row.measured_value ?? "",
+            row.target_value ?? "",
+            row.result ?? "",
+          ]
+            .map(esc)
+            .join(",")
+        );
+      }
+
+      const blob = new Blob([lines.join("\r\n")], {
+        type: "text/csv;charset=utf-8",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `test_result_${d.ai_model_id}.csv`; // เปิดด้วย Excel ได้ทันที
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
     } catch (err) {
       alert(
-        "Failed to delete: " +
+        "Download failed: " +
           (err instanceof Error ? err.message : "Unknown error")
       );
     }
   };
+
+  // const handleDelete = async (resultId: number) => {
+  //   if (!confirm("Are you sure you want to delete this test result?")) {
+  //     return;
+  //   }
+
+  //   try {
+  //     await deleteTestResult(resultId);
+  //     await loadData(); // Refresh the list
+  //   } catch (err) {
+  //     alert(
+  //       "Failed to delete: " +
+  //         (err instanceof Error ? err.message : "Unknown error")
+  //     );
+  //   }
+  // };
 
   useEffect(() => {
     void loadData();
@@ -189,13 +268,13 @@ export default function Reports() {
       case "PASS":
         return (
           <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
-            PASS
+            OK
           </span>
         );
       case "NG":
         return (
           <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
-            NG
+            NOK
           </span>
         );
       default:
@@ -365,8 +444,8 @@ export default function Reports() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md cursor-pointer"
                 >
                   <option value="">All Results</option>
-                  <option value="PASS">PASS</option>
-                  <option value="NG">NG</option>
+                  <option value="PASS">OK</option>
+                  <option value="NG">NOK</option>
                 </select>
               </div>
               <div>
@@ -411,7 +490,6 @@ export default function Reports() {
               >
                 Reset
               </button>
-
             </div>
           </div>
         )}
@@ -426,30 +504,30 @@ export default function Reports() {
 
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50">
+              <thead className="bg-[#164799]">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">
                     ID
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">
                     Date
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">
                     Model
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">
                     Serial Number
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">
                     COP No
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">
                     Result
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                    Accuracy
+                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">
+                    Reliability
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">
                     Actions
                   </th>
                 </tr>
@@ -503,6 +581,14 @@ export default function Reports() {
                           <Trash2 className="w-4 h-4" />
                           Delete
                         </button> */}
+                        <button
+                          onClick={() => handleDownload(result.result_id)}
+                          className="text-green-600 hover:text-green-900 flex items-center gap-1 cursor-pointer"
+                          title="Download as Excel"
+                        >
+                          <Download className="w-4 h-4" />
+                          Download
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -553,13 +639,13 @@ export default function Reports() {
                   <h4 className="font-medium text-gray-900 mb-2">{model}</h4>
                   <div className="space-y-2">
                     <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">Pass:</span>
+                      <span className="text-sm text-gray-600">OK:</span>
                       <span className="text-sm font-medium text-green-600">
                         {stats.pass}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">NG:</span>
+                      <span className="text-sm text-gray-600">NOK:</span>
                       <span className="text-sm font-medium text-red-600">
                         {stats.ng}
                       </span>
@@ -583,14 +669,14 @@ export default function Reports() {
 
       {/* Detail Modal */}
       {showDetailModal && selectedResult && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-semibold">Test Result Details</h3>
                 <button
                   onClick={() => setShowDetailModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 hover:text-gray-600 cursor-pointer"
                 >
                   <XCircle className="w-6 h-6" />
                 </button>
@@ -658,16 +744,16 @@ export default function Reports() {
                   <table className="w-full border border-gray-200 rounded-lg">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">
+                        <th className="px-4 py-2 text-left text-sm font-medium text-white bg-[#164799]">
                           Parameter
                         </th>
-                        <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">
+                        <th className="px-4 py-2 text-left text-sm font-medium text-white bg-[#164799]">
                           Measured
                         </th>
-                        <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">
+                        <th className="px-4 py-2 text-left text-sm font-medium text-white bg-[#164799]">
                           Target
                         </th>
-                        <th className="px-4 py-2 text-left text-sm font-medium text-gray-700">
+                        <th className="px-4 py-2 text-left text-sm font-medium text-white bg-[#164799]">
                           Result
                         </th>
                       </tr>
@@ -691,11 +777,11 @@ export default function Reports() {
                           <td className="px-4 py-2 text-sm">
                             {detail.result === "PASS" ? (
                               <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
-                                PASS
+                                OK
                               </span>
                             ) : detail.result === "NG" ? (
                               <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
-                                NG
+                                NOK
                               </span>
                             ) : (
                               <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-800">
@@ -716,12 +802,3 @@ export default function Reports() {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
