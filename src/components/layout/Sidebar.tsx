@@ -48,10 +48,10 @@ type TempBand = 'AMBIENT' | 'HOT' | 'COLD';
 type SpecBox = { target: string; spec: string; color: string };
 type ModelSpec = Record<TempBand, SpecBox[]>;
 
-const MODEL_OPTIONS = ['P703 ICAB DBL', 'Test']; // เพิ่มโมเดลใหม่ได้ที่นี่
+const MODEL_OPTIONS = ['P703 DBL CAB', 'Test']; // เพิ่มโมเดลใหม่ได้ที่นี่
 
 const MODEL_SPECS: Record<string, ModelSpec> = {
-  'P703 ICAB DBL': {
+  'P703 DBL CAB': {
     AMBIENT: [
       { target: 'F#1', spec: '≤17', color: '#39c06b' },
       { target: 'F#2', spec: '≤20', color: '#39c06b' },
@@ -113,7 +113,7 @@ async function getKpiOverallStats(model: string): Promise<KpiOverallStats> {
 export const Sidebar: React.FC<SidebarProps> = ({ 
   isCollapsed, 
   onToggleCollapse,
-  selectedModel = 'P703 ICAB DBL',
+  selectedModel = 'P703 DBL CAB',
   onModelChange
 }) => {
   const pathname = usePathname();
@@ -452,7 +452,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                 {/* SPEC Content */}
                 {(() => {
-                  const specs = MODEL_SPECS[model] ?? MODEL_SPECS['P703 ICAB DBL']; // fallback
+                  const specs = MODEL_SPECS[model] ?? MODEL_SPECS['P703 DBL CAB']; // fallback
                   const renderBand = (title: TempBand) => (
                     <motion.div
                       key={`${model}-${title}`}
@@ -598,7 +598,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 // Hook for managing sidebar state
 export const useSidebar = () => {
   const [isCollapsed, setIsCollapsed] = React.useState(false);
-  const [selectedModel, setSelectedModel] = React.useState('P703 ICAB DBL');
+  const [selectedModel, setSelectedModel] = React.useState('P703 DBL CAB');
 
   const toggle = () => setIsCollapsed(!isCollapsed);
   const collapse = () => setIsCollapsed(true);

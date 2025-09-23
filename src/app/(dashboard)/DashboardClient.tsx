@@ -55,7 +55,7 @@ type SummaryData = {
   reliability: number | null;
 };
 
-const DEFAULT_MODEL = "PAB";
+const DEFAULT_MODEL = "P703 DBL CAB";
 
 const normalizeList = <T,>(input: unknown): T[] => {
   if (Array.isArray(input)) return input as T[];

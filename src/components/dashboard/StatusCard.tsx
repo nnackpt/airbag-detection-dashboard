@@ -25,7 +25,7 @@ function formatPercent(n: number | null | undefined): string {
 }
 
 export default function StatCard({
-  model = "P703 ICAB DBL",
+  model = "P703 DBL CAB",
   inSpec,
   reliability,
   loading = false,
