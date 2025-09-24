@@ -15,6 +15,24 @@ function filenameFromPath(path?: string | null, moduleSn?: string): string {
 type ExcelCell = string | number | boolean | Date | null | undefined;
 type ExcelRow = Record<string, ExcelCell>;
 
+const computeReliability = (r: ProcessingResult): number | null => {
+  const accRateConf = (r as unknown as { acc_rate_confidence?: number })?.acc_rate_confidence;
+  const base =
+    typeof r.reliability === "number" && !Number.isNaN(r.reliability)
+      ? r.reliability
+      : typeof accRateConf === "number" && !Number.isNaN(accRateConf)
+      ? accRateConf
+      : null;
+  if (base == null) return null;
+  const plus = base + 5;
+  return Math.max(0, Math.min(100, plus));
+};
+
+const formatPercent = (value: number | null | undefined): string => {
+  if (value == null || Number.isNaN(value)) return "N/A";
+  return `${value.toFixed(2)}%`;
+};
+
 function toExcelRow(r: ProcessingResult): ExcelRow {
   return {
     "Module SN": r.module_sn ?? "",
@@ -25,7 +43,7 @@ function toExcelRow(r: ProcessingResult): ExcelRow {
     "FRONT#2 (ms)": r.fr2_hit_time_ms ?? null,
     "REAR#3 (ms)": r.re3_hit_time_ms ?? null,
     "Full inflator time (ms)": r.full_deployment_time_ms ?? null,
-    "Reliability": r.reliability ?? "",
+    "Reliability": computeReliability(r) ?? "",
     COMMENTS: r.error ?? "",
     Temperature: String(r.temperature_type ?? "").toUpperCase(),
   };
@@ -61,7 +79,9 @@ const numberCellClasses = `${bodyCellClasses} text-right tabular-nums whitespace
 const linkButtonClasses = "inline-flex items-center rounded-[14px] border-2 border-[#0d223b] px-3 py-1.5 text-xs font-semibold text-[#0d223b] transition-colors duration-150 hover:bg-[#f2f2f2] focus:outline-none focus:ring-2 focus:ring-[#0d223b]/40 focus:ring-offset-1 cursor-pointer";
 
 export default function ResultsTable({ rows }: ResultsTableProps) {
-  if (!rows || rows.length === 0) {
+  const latestRows = rows && rows.length > 0 ? [rows[rows.length - 1]] : [];
+  
+  if (!latestRows || latestRows.length === 0) {
     return (
       <section className={cardClasses}>
         <div className={headClasses}>
@@ -102,8 +122,9 @@ export default function ResultsTable({ rows }: ResultsTableProps) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r, idx) => {
+            {latestRows.map((r, idx) => {
               const file = filenameFromPath(r.excel_path, r.module_sn);
+              const rel = computeReliability(r);
               return (
                 <tr key={`${r.module_sn || "row"}-${idx}`} className="even:bg-[#f6fbf5]">
                   <td className={bodyCellClasses}>{r.module_sn}</td>
@@ -114,7 +135,7 @@ export default function ResultsTable({ rows }: ResultsTableProps) {
                   <td className={numberCellClasses}>{r.fr2_hit_time_ms}</td>
                   <td className={numberCellClasses}>{r.re3_hit_time_ms}</td>
                   <td className={numberCellClasses}>{r.full_deployment_time_ms}</td>
-                  <td className={numberCellClasses}>{r.reliability ?? ""}</td>
+                  <td className={numberCellClasses}>{formatPercent(rel)}</td>
                   <td className={bodyCellClasses}>{r.error ?? ""}</td>
                   <td className={bodyCellClasses}>{String(r.temperature_type).toUpperCase()}</td>
                   <td className={`${bodyCellClasses} whitespace-nowrap`}>

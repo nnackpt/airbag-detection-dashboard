@@ -162,8 +162,9 @@ function ProcessingSummaryCard({
   loading,
 }: ProcessingSummaryCardProps) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="rounded-2xl border border-slate-200 bg-[#D7E8F5] p-4 shadow-sm">
       <div className="flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+        {/* Model */}
         <div className="flex flex-1 items-center gap-2">
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Model
@@ -171,11 +172,20 @@ function ProcessingSummaryCard({
           {loading ? (
             <span className="h-4 w-32 animate-pulse rounded bg-slate-200" />
           ) : (
-            <span className="text-base font-semibold text-slate-900">
-              {model}
+            // 2) ทำเป็น badge โทนเหลือง + ตัวอักษร #3431C0
+            <span className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold bg-yellow-100">
+              {/* <span className="h-2 w-2 rounded-full bg-yellow-500" /> */}
+              <span
+                className="text-2xl font-semibold"
+                style={{ color: "#3431C0" }}
+              >
+                {model}
+              </span>
             </span>
           )}
         </div>
+
+        {/* In Spec (เดิม) */}
         <div className="flex flex-1 items-center gap-2">
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             In Spec
@@ -184,7 +194,7 @@ function ProcessingSummaryCard({
             <span className="h-6 w-16 animate-pulse rounded-full bg-slate-200" />
           ) : inSpec ? (
             <span
-              className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${
+              className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-2xl font-semibold ${
                 inSpec === "OK"
                   ? "bg-emerald-100 text-emerald-700"
                   : "bg-rose-100 text-rose-700"
@@ -201,6 +211,8 @@ function ProcessingSummaryCard({
             <span className="text-sm text-slate-400">?????????????</span>
           )}
         </div>
+
+        {/* Reliability */}
         <div className="flex flex-1 items-center gap-2">
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             Reliability
@@ -208,8 +220,15 @@ function ProcessingSummaryCard({
           {loading ? (
             <span className="h-4 w-20 animate-pulse rounded bg-slate-200" />
           ) : (
-            <span className="text-base font-semibold text-slate-900">
-              {formatPercent(reliability)}
+            // 3) ทำเป็น badge โทนชมพู + ตัวอักษร #3431C0
+            <span className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold bg-pink-100">
+              {/* <span className="h-2 w-2 rounded-full bg-pink-500" /> */}
+              <span
+                className="text-2xl font-semibold"
+                style={{ color: "#3431C0" }}
+              >
+                {formatPercent(reliability)}
+              </span>
             </span>
           )}
         </div>

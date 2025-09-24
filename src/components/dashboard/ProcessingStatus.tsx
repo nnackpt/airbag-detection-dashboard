@@ -109,6 +109,16 @@ export default function ProcessingStatusBox({
           setImgs(validImages);
           setFolderUsed(name);
           setLoadingImgs(false);
+
+          setStickyImgs(validImages);
+          setStickyFolder(name);
+          if (typeof window !== "undefined") {
+            try {
+              localStorage.setItem("lastKeyFrames", JSON.stringify(validImages));
+              localStorage.setItem("lastKeyFramesFolder", name);
+            } catch {}
+          }
+
           console.log("Found images for folder:", name, validImages);
           return;
         } else {
@@ -124,7 +134,7 @@ export default function ProcessingStatusBox({
   }, [candidates]);
 
   useEffect(() => {
-    setImgs({});
+    // setImgs({});
     setFolderUsed("");
     setErrorHint("");
 
@@ -159,6 +169,29 @@ export default function ProcessingStatusBox({
       pollRef.current = null;
     }
   }, [imgs]);
+
+  const [stickyImgs, setStickyImgs] = useState<ImgState>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const raw = localStorage.getItem("lastKeyFrames");
+        return raw ? (JSON.parse(raw) as ImgState) : {};
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  });
+
+  const [stickyFolder, setStickyFolder] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("lastKeyFramesFolder") || "";
+    }
+    return "";
+  });
+
+  // ใช้ตัวแปรแสดงผล: ถ้า imgs ว่าง ให้ใช้ stickyImgs/ stickyFolder แทน
+  const displayImgs = Object.keys(imgs || {}).length ? imgs : stickyImgs;
+  const displayFolderUsed = folderUsed || stickyFolder;
 
   return (
     <section
@@ -199,16 +232,16 @@ export default function ProcessingStatusBox({
       </div>
 
       <div className="mt-4">
-        <div className="text-xs font-extrabold opacity-90 mb-2">
+        {/* <div className="text-xs font-extrabold opacity-90 mb-2">
           KEY FRAMES
           {loadingImgs ? " · Loading..." : ""}
-          {folderUsed ? ` · Folder: ${folderUsed}` : ""}
+          {displayFolderUsed ? ` · Folder: ${displayFolderUsed}` : ""}
           {errorHint ? ` · ${errorHint}` : ""}
-        </div>
+        </div> */}
 
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
           {ORDER.map((k) => {
-            const src = toAbsUrl(imgs?.[k]);
+            const src = toAbsUrl(displayImgs?.[k]);
             const label = LABELS[k];
             return (
               <div
