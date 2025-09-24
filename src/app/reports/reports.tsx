@@ -21,6 +21,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
 
 function formatISODate(d: Date): string {
   const tzOffsetMs = d.getTimezoneOffset() * 60 * 1000;
@@ -160,7 +161,7 @@ export default function Reports() {
 
       // Header + summary
       const lines: string[] = [];
-      const esc = (v: unknown) => `"${String(v ?? "").replaceAll('"', '""')}"`; 
+      const esc = (v: unknown) => `"${String(v ?? "").replaceAll('"', '""')}"`;
 
       lines.push("Summary");
       lines.push(
@@ -292,6 +293,139 @@ export default function Reports() {
     setCurrentPage(1);
     await loadData(df, 1);
   }, [loadData, pageSize]);
+
+  const handleDownloadByFilter = async () => {
+  try {
+    setLoading(true);
+    
+    const effective: ReportsFilter = {
+      start_date: filters.start_date || "",
+      end_date: filters.end_date || "",
+      model_name: filters.model_name || undefined,
+      overall_result: filters.overall_result || undefined,
+      serial_number: filters.serial_number || undefined,
+      cop_no: filters.cop_no || undefined,
+      page: 1,
+      page_size: 9999, // ดึงทั้งหมด
+    };
+
+    // ดึงข้อมูลตาม filter
+    const resultsResponse = await getTestResults(effective);
+    
+    if (resultsResponse.data.length === 0) {
+      alert("No data found for the selected filters");
+      return;
+    }
+
+    // ดึงรายละเอียดของแต่ละ test result
+    const detailedResults = await Promise.all(
+      resultsResponse.data.map(result => getTestResultDetails(result.result_id))
+    );
+
+    // สร้าง Excel data
+    const worksheetData = [];
+    
+    // Header row
+    worksheetData.push([
+      "Test ID",
+      "Model", 
+      "Serial Number",
+      "COP No",
+      "OPENING TIME",
+      "FRONT#1",
+      "FRONT#2", 
+      "REAR#3",
+      "Full Inflator",
+      "Overall Result",
+      "Reliability (%)",
+      "Comment",
+      "Test Date",
+    ]);
+    
+    // Data rows
+    for (const detail of detailedResults) {
+      // หาค่าของแต่ละ parameter
+      const openingTime = detail.details.find(d => d.point_name === "OPENING TIME")?.measured_value || "";
+      const front1 = detail.details.find(d => d.point_name === "FRONT#1")?.measured_value || "";
+      const front2 = detail.details.find(d => d.point_name === "FRONT#2")?.measured_value || "";
+      const rear3 = detail.details.find(d => d.point_name === "REAR#3")?.measured_value || "";
+      const fullInflator = detail.details.find(d => d.point_name === "Full Inflator")?.measured_value || "";
+      
+      worksheetData.push([
+        detail.ai_model_id,
+        detail.model_name,
+        detail.serial_number || "",
+        detail.cop_no || "",
+        openingTime,
+        front1,
+        front2,
+        rear3,
+        fullInflator,
+        detail.overall_result || "",
+        detail.accuracy_rate ?? "",
+        detail.comment || "",
+        detail.test_date ? new Date(detail.test_date).toLocaleString() : "",
+      ]);
+    }
+
+    // สร้าง workbook และ worksheet
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(worksheetData);
+    
+    // ปรับความกว้างของ columns
+    // const colWidths = [
+    //   { wch: 10 }, // Test ID
+    //   { wch: 8 },  // Model
+    //   { wch: 15 }, // Serial Number
+    //   { wch: 12 }, // COP No
+    //   { wch: 18 }, // Test Date
+    //   { wch: 12 }, // Overall Result
+    //   { wch: 12 }, // Reliability
+    //   { wch: 20 }, // Comment
+    //   { wch: 12 }, // OPENING TIME
+    //   { wch: 10 }, // FRONT#1
+    //   { wch: 10 }, // FRONT#2
+    //   { wch: 10 }, // REAR#3
+    //   { wch: 12 }  // Full Inflator
+    // ];
+    const colWidths = [
+      { wch: 10 }, // Test ID
+      { wch: 8 },  // Model
+      { wch: 15 }, // Serial Number
+      { wch: 12 }, // COP No
+      { wch: 12 },
+      { wch: 10 }, 
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 12 },
+      { wch: 12 }, 
+      { wch: 12 },
+      { wch: 20 },
+      { wch: 18 }, // Test Date
+    ];
+    ws['!cols'] = colWidths;
+    
+    // เพิ่ม worksheet เข้า workbook
+    XLSX.utils.book_append_sheet(wb, ws, "Test Reports");
+    
+    // สร้างชื่อไฟล์ตาม filter
+    const dateRange = `${filters.start_date || "all"}_to_${filters.end_date || "all"}`;
+    const modelFilter = filters.model_name ? `_${filters.model_name}` : "";
+    const resultFilter = filters.overall_result ? `_${filters.overall_result}` : "";
+    const filename = `test_reports_${dateRange}${modelFilter}${resultFilter}.xlsx`;
+    
+    // ดาวโหลด Excel file
+    XLSX.writeFile(wb, filename);
+    
+  } catch (err) {
+    alert(
+      "Download failed: " + 
+      (err instanceof Error ? err.message : "Unknown error")
+    );
+  } finally {
+    setLoading(false);
+  }
+};
 
   if (loading && results.length === 0) {
     return (
@@ -479,7 +613,16 @@ export default function Reports() {
                 />
               </div>
             </div>
-            <div className="mt-4 flex justify-end">
+            <div className="mt-4 flex justify-end gap-3">
+              <button
+                onClick={handleDownloadByFilter}
+                disabled={loading}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-2"
+                title="Download filtered results as Excel"
+              >
+                <Download className="w-4 h-4" />
+                Download Excel
+              </button>
               <button
                 onClick={handleResetFilters}
                 disabled={isResetDisabled}

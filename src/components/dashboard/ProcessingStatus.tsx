@@ -36,12 +36,17 @@ export default function ProcessingStatusBox({
 }: {
   item: ProcessingStatusType | null;
 }) {
+  const [displayProgress, setDisplayProgress] = useState(0);
+  const [lastCompletedItem, setLastCompletedItem] = useState<string | null>(null);
+  const prevVideoRef = useRef<string | null>(null);
   const rawProgress = Number(item?.progress ?? 0);
   const progress = Math.max(
     0,
     Math.min(100, Number.isFinite(rawProgress) ? rawProgress : 0)
   );
-  const compact = progress >= 100;
+  const isComplete = item?.status === "completed" && progress >= 100;
+  const compact = isComplete;
+
   const start = item?.start_time
     ? new Date(item.start_time).toLocaleString("en-US")
     : "N/A";
@@ -51,17 +56,10 @@ export default function ProcessingStatusBox({
     const noExt = rawName.replace(/\.[^.]+$/, "");
     const normalized = rawName.replace(/[.\s]+/g, "_");
 
-    // เพิ่มตัวเลือกที่เก็บช่องว่างไว้
-    const withSpaces = rawName.replace(/[.]+/g, "_"); // แทนที่แค่จุด ไม่แทนที่ช่องว่าง
+    const withSpaces = rawName.replace(/[.]+/g, "_");
 
     return Array.from(
-      new Set([
-        noExt,
-        rawName,
-        normalized,
-        withSpaces, // เพิ่มตัวเลือกนี้
-        rawName.trim(), // ลบช่องว่างหน้าหลัง
-      ])
+      new Set([noExt, rawName, normalized, withSpaces, rawName.trim()])
     ).filter(Boolean);
   }, [item?.video_name]);
 
@@ -76,7 +74,6 @@ export default function ProcessingStatusBox({
     if (!u) return undefined;
     try {
       const base = new URL(API_BASE);
-      // ไม่ต้อง encode ซ้ำเพราะ API ส่งมาแล้ว encoded แล้ว
       const abs = new URL(u, base.origin);
       return abs.toString();
     } catch (error) {
@@ -86,7 +83,7 @@ export default function ProcessingStatusBox({
   };
 
   // Stable delay to keep deps simple
-  const pollDelay = progress < 100 ? 2000 : 5000;
+  const pollDelay = displayProgress < 100 ? 2000 : 5000;
 
   // Stable fetcher to satisfy exhaustive-deps
   const fetchImages = useCallback(async () => {
@@ -97,7 +94,6 @@ export default function ProcessingStatusBox({
         const res = await getFolderImages(name);
         const images = res.images || {};
 
-        // เพิ่มการตรวจสอบ URL ของรูปภาพ
         const validImages: ImgState = {};
         for (const [key, url] of Object.entries(images)) {
           if (url && typeof url === "string") {
@@ -114,7 +110,10 @@ export default function ProcessingStatusBox({
           setStickyFolder(name);
           if (typeof window !== "undefined") {
             try {
-              localStorage.setItem("lastKeyFrames", JSON.stringify(validImages));
+              localStorage.setItem(
+                "lastKeyFrames",
+                JSON.stringify(validImages)
+              );
               localStorage.setItem("lastKeyFramesFolder", name);
             } catch {}
           }
@@ -189,9 +188,60 @@ export default function ProcessingStatusBox({
     return "";
   });
 
-  // ใช้ตัวแปรแสดงผล: ถ้า imgs ว่าง ให้ใช้ stickyImgs/ stickyFolder แทน
   const displayImgs = Object.keys(imgs || {}).length ? imgs : stickyImgs;
   const displayFolderUsed = folderUsed || stickyFolder;
+
+  useEffect(() => {
+    const currentName = item?.video_name ?? null;
+    const isNewVideo = !!currentName && currentName !== prevVideoRef.current;
+
+    if (item?.status === "completed" && currentName && currentName !== lastCompletedItem) {
+      setLastCompletedItem(currentName);
+    }
+
+    if (isNewVideo && currentName !== lastCompletedItem && item?.status !== "completed") {
+      setDisplayProgress(0);
+      setLastCompletedItem(null); 
+    }
+
+    prevVideoRef.current = currentName;
+
+    const target = progress;
+
+    if (item?.status === "completed") {
+      setDisplayProgress(100);
+      return;
+    }
+
+    if (!item || item.status === "queued") {
+      return; 
+    }
+
+    const updateProgress = () => {
+      setDisplayProgress(current => {
+        if (current >= target) return current;
+        
+        const step = Math.max(1, Math.ceil((target - current) * 0.1)); 
+        const next = Math.min(target, current + step);
+        return next;
+      });
+    };
+
+    const timer = setInterval(updateProgress, 500);
+    return () => clearInterval(timer);
+  }, [item?.video_name, progress, item?.status, lastCompletedItem]);
+
+  const getStatusMessage = () => {
+    if (!item) return "Queue is empty";
+    if (item.status === "completed") return `${item.video_name} - COMPLETED`;
+    if (item.status === "queued") return `${item.video_name} - In Queue`;
+    return item.video_name;
+  };
+
+  // useEffect(() => {
+  //   const haveAll = ORDER.every((k) => !!displayImgs?.[k]);
+  //   if (haveAll) setDisplayProgress(100);
+  // }, [displayImgs]);
 
   return (
     <section
@@ -206,7 +256,7 @@ export default function ProcessingStatusBox({
         {compact ? "COMPLETED" : "PROCESSING STATUS"}
       </h2>
 
-      <div className="font-extrabold text-base opacity-95 mb-4" id="procName">
+      {/* <div className="font-extrabold text-base opacity-95 mb-4" id="procName">
         {item?.video_name ?? "Queue is empty"}
       </div>
 
@@ -214,7 +264,7 @@ export default function ProcessingStatusBox({
         <div
           className="h-full bg-[#28c26a] transition-all duration-500"
           id="procFill"
-          style={{ width: `${progress}%` }}
+          style={{ width: `${displayProgress}%` }}
         />
       </div>
 
@@ -224,8 +274,43 @@ export default function ProcessingStatusBox({
         }`}
         id="procPct"
       >
-        {progress}%
+        {Math.round(displayProgress)}%
+      </div> */}
+
+      <div className="font-extrabold text-base opacity-95 mb-4" id="procName">
+        {getStatusMessage()}
       </div>
+
+      <div
+        className="h-10 overflow-hidden border-2 border-black/15 bg-[#d4d9df]"
+      >
+        <div
+          className="h-full bg-[#28c26a] transition-all duration-1000"
+          id="procFill"
+          style={{ width: `${Math.round(displayProgress)}%` }}
+        />
+      </div>
+
+      <div
+        className={`inline-flex items-center justify-center font-black text-white bg-[#28c26a] border-[4px] border-[#1f9d55] rounded-[20px] mt-3 ${
+          isComplete ? "text-lg px-4 py-1" : "text-[40px] px-4 py-1"
+        }`}
+        id="procPct"
+      >
+        {Math.round(displayProgress)}%
+      </div>
+
+      {/* แสดง processing stage ถ้าต้องการ */}
+      {item?.status === "processing" && progress < 85 && (
+        <div className="text-xs opacity-75 mt-1">
+          Detection Phase...
+        </div>
+      )}
+      {item?.status === "processing" && progress >= 85 && progress < 100 && (
+        <div className="text-xs opacity-75 mt-1">
+          Full Deployment Analysis...
+        </div>
+      )}
 
       <div className="mt-2 text-sm font-black opacity-90" id="procStart">
         Start: {start}
