@@ -246,9 +246,10 @@ export default function DashboardClient() {
   const [pendingAlerts, setPendingAlerts] = useState<Alert[]>([]);
   const [accuracySummary, setAccuracySummary] = useState<AccuracySummary>(null);
   const [loading, setLoading] = useState(true);
+  const [bootstrapped, setBootstrapped] = useState(false);
 
   const refreshAll = useCallback(async () => {
-    setLoading(true);
+    if (!bootstrapped) setLoading(true);
     try {
       const [
         statsRes,
@@ -281,8 +282,7 @@ export default function DashboardClient() {
                 typeof accuracyRes.accuracy_avg === "number"
                   ? accuracyRes.accuracy_avg
                   : null,
-              count:
-                typeof accuracyRes.count === "number" ? accuracyRes.count : 0,
+              count: typeof accuracyRes.count === "number" ? accuracyRes.count : 0,
             }
           : null
       );
@@ -309,8 +309,9 @@ export default function DashboardClient() {
       }
     } finally {
       setLoading(false);
+      if (!bootstrapped) setBootstrapped(true);
     }
-  }, []);
+  }, [bootstrapped]);
 
   useEffect(() => {
     void refreshAll();
@@ -361,11 +362,11 @@ export default function DashboardClient() {
 
   const activeSummaryLoading = useMemo(() => {
     return (
-      loading &&
+      !bootstrapped &&
       !!activeProcessing &&
       !results.find((r) => r.video_name === activeProcessing.video_name)
     );
-  }, [loading, activeProcessing, results]);
+  }, [bootstrapped, activeProcessing, results]);
 
   const kpiValues = useMemo(() => {
     const queue = systemStatus?.videos_in_queue ?? 0;
