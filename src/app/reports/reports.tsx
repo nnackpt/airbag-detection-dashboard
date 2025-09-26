@@ -22,7 +22,7 @@ import {
   Filter,
   XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 
 function formatISODate(d: Date): string {
@@ -78,8 +78,8 @@ export default function Reports() {
   const [filters, setFilters] = useState<Partial<ReportsFilter>>({
     start_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
       .toISOString()
-      .split("T")[0], // 30 days ago
-    end_date: new Date().toISOString().split("T")[0], // today
+      .split("T")[0],
+    end_date: new Date().toISOString().split("T")[0],
     page: 1,
     page_size: pageSize,
   });
@@ -92,10 +92,21 @@ export default function Reports() {
     [filters, pageSize]
   );
 
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isSearching, setIsSearching] = useState(false);
+
   const loadData = useCallback(
     async (overrideFilters?: Partial<ReportsFilter>, overridePage?: number) => {
       try {
-        setLoading(true);
+        const isTextSearch = overrideFilters && 
+          ('serial_number' in overrideFilters || 'cop_no' in overrideFilters);
+        
+        if (isTextSearch) {
+          setIsSearching(true);
+        } else {
+          setLoading(true);
+        }
+        
         setError(null);
 
         const mergedFilters: Partial<ReportsFilter> = {
@@ -136,15 +147,39 @@ export default function Reports() {
         setError(err instanceof Error ? err.message : "Failed to load reports");
       } finally {
         setLoading(false);
+        setIsSearching(false);
+        setIsInitialLoading(false);
       }
     },
     [filters, currentPage, pageSize]
   );
 
+  const [localFilters, setLocalFilters] = useState({
+    serial_number: filters.serial_number || "",
+    cop_no: filters.cop_no || ""
+  });
+
+  const debounceTimeouts = useRef<{[key: string]: NodeJS.Timeout}>({});
+
   const handleFilterChange = (newFilters: Partial<ReportsFilter>) => {
     setFilters((prev) => ({ ...prev, ...newFilters }));
-    setCurrentPage(1); // Reset to first page when filtering
+    setCurrentPage(1);
+    
+    const isTextInput = 'serial_number' in newFilters || 'cop_no' in newFilters;
+    if (!isTextInput) {
+      loadData(newFilters, 1);
+    }
   };
+
+  const debouncedFilterChange = useCallback((key: string, value: string) => {
+    if (debounceTimeouts.current[key]) {
+      clearTimeout(debounceTimeouts.current[key]);
+    }
+    
+    debounceTimeouts.current[key] = setTimeout(() => {
+      handleFilterChange({ [key]: value || undefined });
+    }, 500);
+  }, [handleFilterChange]);
 
   const handleViewDetails = async (resultId: number) => {
     try {
@@ -159,11 +194,22 @@ export default function Reports() {
     }
   };
 
+  const handleTextInputChange = (key: string, value: string) => {
+    setLocalFilters(prev => ({ ...prev, [key]: value }));
+    debouncedFilterChange(key, value);
+  };
+
+  useEffect(() => {
+    setLocalFilters({
+      serial_number: filters.serial_number || "",
+      cop_no: filters.cop_no || ""
+    });
+  }, [filters.serial_number, filters.cop_no]);
+
   const handleDownload = async (resultId: number) => {
     try {
       const d = await getTestResultDetails(resultId);
 
-      // Header + summary
       const lines: string[] = [];
       const esc = (v: unknown) => `"${String(v ?? "").replaceAll('"', '""')}"`;
 
@@ -197,7 +243,6 @@ export default function Reports() {
           .join(",")
       );
 
-      // Blank line as section break
       lines.push("");
       lines.push("Measurement Details");
       lines.push(
@@ -224,7 +269,7 @@ export default function Reports() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `test_result_${d.ai_model_id}.csv`; // เปิดด้วย Excel ได้ทันที
+      a.download = `test_result_${d.ai_model_id}.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -236,22 +281,6 @@ export default function Reports() {
       );
     }
   };
-
-  // const handleDelete = async (resultId: number) => {
-  //   if (!confirm("Are you sure you want to delete this test result?")) {
-  //     return;
-  //   }
-
-  //   try {
-  //     await deleteTestResult(resultId);
-  //     await loadData(); // Refresh the list
-  //   } catch (err) {
-  //     alert(
-  //       "Failed to delete: " +
-  //         (err instanceof Error ? err.message : "Unknown error")
-  //     );
-  //   }
-  // };
 
   useEffect(() => {
     void loadData();
@@ -294,7 +323,14 @@ export default function Reports() {
   const handleResetFilters = useCallback(async (): Promise<void> => {
     const df = makeDefaultFilters(pageSize);
     setFilters(df);
+    setLocalFilters({ serial_number: "", cop_no: "" });
     setCurrentPage(1);
+    
+    Object.values(debounceTimeouts.current).forEach(timeout => {
+      clearTimeout(timeout);
+    });
+    debounceTimeouts.current = {};
+    
     await loadData(df, 1);
   }, [loadData, pageSize]);
 
@@ -311,10 +347,9 @@ export default function Reports() {
         serial_number: filters.serial_number || undefined,
         cop_no: filters.cop_no || undefined,
         page: 1,
-        page_size: 9999, // ดึงทั้งหมด
+        page_size: 9999,
       };
 
-      // ดึงข้อมูลตาม filter
       const resultsResponse = await getTestResults(effective);
 
       if (resultsResponse.data.length === 0) {
@@ -450,7 +485,15 @@ export default function Reports() {
     }
   };
 
-  if (loading && results.length === 0) {
+  useEffect(() => {
+    return () => {
+      Object.values(debounceTimeouts.current).forEach(timeout => {
+        clearTimeout(timeout);
+      });
+    };
+  }, []);
+
+  if (isInitialLoading && results.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-7xl mx-auto">
@@ -493,49 +536,6 @@ export default function Reports() {
             </div>
           </div>
         )}
-
-        {/* Statistics Cards */}
-        {/* {statistics && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-lg font-semibold text-gray-900 uppercase">
-                Total Tests
-              </h3>
-              <p className="text-3xl font-bold text-blue-600">
-                {statistics.total_tests}
-              </p>
-            </div>
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-lg font-semibold text-gray-900 uppercase">
-                total in spec
-              </h3>
-              <p className="text-3xl font-bold text-green-600">
-                {statistics.pass_rate}%
-              </p>
-              <p className="text-sm text-gray-500">
-                {statistics.pass_count} / {statistics.total_tests}
-              </p>
-            </div>
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-lg font-semibold text-gray-900 uppercase">
-                Total NG
-              </h3>
-              <p className="text-3xl font-bold text-red-600">
-                {statistics.ng_count}
-              </p>
-            </div>
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-lg font-semibold text-gray-900 uppercase">
-                Avg Accuracy
-              </h3>
-              <p className="text-3xl font-bold text-purple-600">
-                {statistics.avg_accuracy
-                  ? `${statistics.avg_accuracy}%`
-                  : "N/A"}
-              </p>
-            </div>
-          </div>
-        )} */}
 
         {/* Filters Panel */}
         {showFilters && (
@@ -622,17 +622,20 @@ export default function Reports() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Serial Number
                 </label>
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  value={filters.serial_number || ""}
-                  onChange={(e) =>
-                    handleFilterChange({
-                      serial_number: e.target.value || undefined,
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md hover:border-gray-400 transition-colors duration-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400 focus:outline-none"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={localFilters.serial_number}
+                    onChange={(e) => handleTextInputChange('serial_number', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md hover:border-gray-400 transition-colors duration-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400 focus:outline-none"
+                  />
+                  {isSearching && (
+                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                      <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* COP No */}
@@ -640,15 +643,20 @@ export default function Reports() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   COP No
                 </label>
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  value={filters.cop_no || ""}
-                  onChange={(e) =>
-                    handleFilterChange({ cop_no: e.target.value || undefined })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md hover:border-gray-400 transition-colors duration-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400 focus:outline-none"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search..."
+                    value={localFilters.cop_no}
+                    onChange={(e) => handleTextInputChange('cop_no', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md hover:border-gray-400 transition-colors duration-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400 focus:outline-none"
+                  />
+                  {isSearching && (
+                    <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                      <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
