@@ -27,6 +27,7 @@ export interface ReportsFilter {
   start_date?: string | null;
   end_date?: string | null;
   model_name?: string | null;
+  product_model?: string;
   overall_result?: string | null;
   serial_number?: string | null;
   cop_no?: string | null;

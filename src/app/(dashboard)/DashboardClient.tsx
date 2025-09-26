@@ -53,7 +53,7 @@ type TimestampValue = string | number | Date | null | undefined;
 
 type SummaryData = {
   model: string;
-  inSpec: "OK" | "NG" | null;
+  inSpec: "OK" | "NOK" | null;
   reliability: number | null;
 };
 
@@ -97,13 +97,13 @@ const deriveSummary = (
   }
 
   // ใช้ข้อมูลจาก API ก่อน
-  let inSpec: "OK" | "NG" | null = null;
+  let inSpec: "OK" | "NOK" | null = null;
   if (typeof result.in_spec === "boolean") {
-    inSpec = result.in_spec ? "OK" : "NG";
+    inSpec = result.in_spec ? "OK" : "NOK";
   } else if (typeof result.inSpec === "boolean") {
-    inSpec = result.inSpec ? "OK" : "NG";
+    inSpec = result.inSpec ? "OK" : "NOK";
   } else if (result.out_of_spec === true) {
-    inSpec = "NG";
+    inSpec = "NOK";
   } else if (result.out_of_spec === false) {
     inSpec = "OK";
   }
@@ -145,7 +145,7 @@ const isNgResult = (result: ExtendedProcessingResult): boolean => {
 
 interface ProcessingSummaryCardProps {
   model: string;
-  inSpec: "OK" | "NG" | null;
+  inSpec: "OK" | "NOK" | null;
   reliability: number | null;
   loading: boolean;
 }

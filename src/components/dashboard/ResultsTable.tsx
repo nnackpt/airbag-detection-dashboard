@@ -28,6 +28,50 @@ const computeReliability = (r: ProcessingResult): number | null => {
   return Math.max(0, Math.min(100, plus));
 };
 
+const isNGValue = (r: ProcessingResult, field: keyof ProcessingResult): boolean => {
+  const value = r[field];
+  
+  if (r.out_of_spec === true) {
+    return true;
+  }
+  
+  const mustDetectFields = ['fr1_hit_time_ms', 'fr2_hit_time_ms', 're3_hit_time_ms'];
+  if (mustDetectFields.includes(field as string)) {
+    if (!value || value === '' || value === null || value === undefined) {
+      return true;
+    }
+  }
+  
+  return false;
+};
+
+const isRowNG = (r: ProcessingResult): boolean => {
+  if (r.out_of_spec === true) {
+    return true;
+  }
+  
+  const mustDetectFields = [r.fr1_hit_time_ms, r.fr2_hit_time_ms, r.re3_hit_time_ms];
+  const hasEmptyDetection = mustDetectFields.some(value => 
+    !value || value === '' || value === null || value === undefined
+  );
+  
+  return hasEmptyDetection;
+};
+
+const getRowClass = (r: ProcessingResult, defaultClass: string): string => {
+  const isNG = isRowNG(r);
+  if (isNG) {
+    return "bg-red-100";
+  }
+  return defaultClass;
+};
+
+const getCellClass = (r: ProcessingResult, isNumber: boolean = false): string => {
+  const baseClass = isNumber ? numberCellClasses : bodyCellClasses;
+  const isNG = isRowNG(r);
+  return isNG ? `${baseClass} bg-red-100` : baseClass;
+};
+
 const formatPercent = (value: number | null | undefined): string => {
   if (value == null || Number.isNaN(value)) return "N/A";
   return `${value.toFixed(2)}%`;
@@ -80,6 +124,12 @@ const linkButtonClasses = "inline-flex items-center rounded-[14px] border-2 bord
 
 export default function ResultsTable({ rows }: ResultsTableProps) {
   const latestRows = rows && rows.length > 0 ? [rows[rows.length - 1]] : [];
+
+  const getCellClass = (r: ProcessingResult, field: keyof ProcessingResult, isNumber: boolean = false): string => {
+    const baseClass = isNumber ? numberCellClasses : bodyCellClasses;
+    const isNG = isNGValue(r, field);
+    return isNG ? `${baseClass} bg-red-100` : baseClass;
+  };
   
   if (!latestRows || latestRows.length === 0) {
     return (
@@ -125,20 +175,35 @@ export default function ResultsTable({ rows }: ResultsTableProps) {
             {latestRows.map((r, idx) => {
               const file = filenameFromPath(r.excel_path, r.module_sn);
               const rel = computeReliability(r);
+              const isNG = isRowNG(r);
+              
               return (
-                <tr key={`${r.module_sn || "row"}-${idx}`} className="even:bg-[#f6fbf5]">
-                  <td className={bodyCellClasses}>{r.module_sn}</td>
-                  <td className={bodyCellClasses}>{r.cop_number}</td>
-                  <td className={bodyCellClasses}>{r.processing_time}</td>
-                  <td className={numberCellClasses}>{r.explosion_time_ms}</td>
-                  <td className={numberCellClasses}>{r.fr1_hit_time_ms}</td>
-                  <td className={numberCellClasses}>{r.fr2_hit_time_ms}</td>
-                  <td className={numberCellClasses}>{r.re3_hit_time_ms}</td>
-                  <td className={numberCellClasses}>{r.full_deployment_time_ms}</td>
-                  <td className={numberCellClasses}>{formatPercent(rel)}</td>
-                  <td className={bodyCellClasses}>{r.error ?? ""}</td>
-                  <td className={bodyCellClasses}>{String(r.temperature_type).toUpperCase()}</td>
-                  <td className={`${bodyCellClasses} whitespace-nowrap`}>
+                <tr 
+                  key={`${r.module_sn || "row"}-${idx}`} 
+                  className={getRowClass(r, "even:bg-[#f6fbf5]")}
+                >
+                  <td className={getCellClass(r, 'module_sn', false)}>{r.module_sn}</td>
+                  <td className={getCellClass(r, 'cop_number', false)}>{r.cop_number}</td>
+                  <td className={getCellClass(r, 'processing_time', false)}>{r.processing_time}</td>
+                  <td className={getCellClass(r, 'explosion_time_ms', true)}>
+                    {r.explosion_time_ms}
+                  </td>
+                  <td className={getCellClass(r, 'fr1_hit_time_ms', true)}>
+                    {r.fr1_hit_time_ms || (isNG ? <span className="text-red-800 font-bold">NOT DETECTED</span> : '')}
+                  </td>
+                  <td className={getCellClass(r, 'fr2_hit_time_ms', true)}>
+                    {r.fr2_hit_time_ms || (isNG ? <span className="text-red-800 font-bold">NOT DETECTED</span> : '')}
+                  </td>
+                  <td className={getCellClass(r, 're3_hit_time_ms', true)}>
+                    {r.re3_hit_time_ms || (isNG ? <span className="text-red-800 font-bold">NOT DETECTED</span> : '')}
+                  </td>
+                  <td className={getCellClass(r, 'full_deployment_time_ms', true)}>
+                    {r.full_deployment_time_ms}
+                  </td>
+                  <td className={getCellClass(r, 'reliability', true)}>{formatPercent(rel)}</td>
+                  <td className={getCellClass(r, 'error', false)}>{r.error ?? ""}</td>
+                  <td className={getCellClass(r, 'temperature_type', false)}>{String(r.temperature_type).toUpperCase()}</td>
+                  <td className={`${getCellClass(r, 'excel_path', false)} whitespace-nowrap`}>
                     <button
                       type="button"
                       onClick={() => downloadExcel(r)}

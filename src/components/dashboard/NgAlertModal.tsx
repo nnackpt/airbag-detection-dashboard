@@ -86,7 +86,7 @@ export default function NgAlertModal({ alert, onContinue, onClose }: Props) {
                 className="select-none font-black text-white text-[clamp(28px,6vw,40px)] tracking-widest drop-shadow-lg"
                 style={{ textShadow: "0 4px 8px rgba(0,0,0,0.3)" }}
               >
-                NG
+                NOK
               </div>
               <div className="text-red-100 text-xs md:text-sm font-medium mt-1 tracking-wide uppercase">
                 Quality Alert
@@ -102,7 +102,7 @@ export default function NgAlertModal({ alert, onContinue, onClose }: Props) {
               <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
             </svg>
             <span className="text-lg font-medium">
-              ระบบจะหยุดการประมวลผลชั่วคราวจนกว่าผู้ใช้จะกด
+              Processing will pause until the user presses
               <span className="mx-2 font-bold underline underline-offset-2 decoration-2 decoration-red-200">
                 Continue
               </span>

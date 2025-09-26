@@ -1,5 +1,6 @@
 "use client";
 
+import CustomSelect from "@/components/UI/CustomSelect";
 import {
   // deleteTestResult,
   getReportsStatistics,
@@ -15,6 +16,7 @@ import {
 import {
   AlertCircle,
   CheckCircle,
+  ChevronDown,
   Download,
   Eye,
   Filter,
@@ -49,6 +51,7 @@ function isFiltersDefault(
     (f.start_date || "") === df.start_date &&
     (f.end_date || "") === df.end_date &&
     (f.model_name ?? undefined) === undefined &&
+    (f.product_model ?? undefined) === undefined &&
     (f.overall_result ?? undefined) === undefined &&
     (f.serial_number ?? undefined) === undefined &&
     (f.cop_no ?? undefined) === undefined &&
@@ -109,6 +112,7 @@ export default function Reports() {
           start_date: mergedFilters.start_date || "",
           end_date: mergedFilters.end_date || "",
           model_name: mergedFilters.model_name || undefined,
+          product_model: mergedFilters.product_model || undefined,
           overall_result: mergedFilters.overall_result || undefined,
           serial_number: mergedFilters.serial_number || undefined,
           cop_no: mergedFilters.cop_no || undefined,
@@ -295,137 +299,156 @@ export default function Reports() {
   }, [loadData, pageSize]);
 
   const handleDownloadByFilter = async () => {
-  try {
-    setLoading(true);
-    
-    const effective: ReportsFilter = {
-      start_date: filters.start_date || "",
-      end_date: filters.end_date || "",
-      model_name: filters.model_name || undefined,
-      overall_result: filters.overall_result || undefined,
-      serial_number: filters.serial_number || undefined,
-      cop_no: filters.cop_no || undefined,
-      page: 1,
-      page_size: 9999, // ดึงทั้งหมด
-    };
+    try {
+      setLoading(true);
 
-    // ดึงข้อมูลตาม filter
-    const resultsResponse = await getTestResults(effective);
-    
-    if (resultsResponse.data.length === 0) {
-      alert("No data found for the selected filters");
-      return;
-    }
+      const effective: ReportsFilter = {
+        start_date: filters.start_date || "",
+        end_date: filters.end_date || "",
+        model_name: filters.model_name || undefined,
+        product_model: filters.product_model || undefined,
+        overall_result: filters.overall_result || undefined,
+        serial_number: filters.serial_number || undefined,
+        cop_no: filters.cop_no || undefined,
+        page: 1,
+        page_size: 9999, // ดึงทั้งหมด
+      };
 
-    // ดึงรายละเอียดของแต่ละ test result
-    const detailedResults = await Promise.all(
-      resultsResponse.data.map(result => getTestResultDetails(result.result_id))
-    );
+      // ดึงข้อมูลตาม filter
+      const resultsResponse = await getTestResults(effective);
 
-    // สร้าง Excel data
-    const worksheetData = [];
-    
-    // Header row
-    worksheetData.push([
-      "Test ID",
-      "Model", 
-      "Serial Number",
-      "COP No",
-      "OPENING TIME",
-      "FRONT#1",
-      "FRONT#2", 
-      "REAR#3",
-      "Full Inflator",
-      "Overall Result",
-      "Reliability (%)",
-      "Comment",
-      "Test Date",
-    ]);
-    
-    // Data rows
-    for (const detail of detailedResults) {
-      // หาค่าของแต่ละ parameter
-      const openingTime = detail.details.find(d => d.point_name === "OPENING TIME")?.measured_value || "";
-      const front1 = detail.details.find(d => d.point_name === "FRONT#1")?.measured_value || "";
-      const front2 = detail.details.find(d => d.point_name === "FRONT#2")?.measured_value || "";
-      const rear3 = detail.details.find(d => d.point_name === "REAR#3")?.measured_value || "";
-      const fullInflator = detail.details.find(d => d.point_name === "Full Inflator")?.measured_value || "";
-      
+      if (resultsResponse.data.length === 0) {
+        alert("No data found for the selected filters");
+        return;
+      }
+
+      // ดึงรายละเอียดของแต่ละ test result
+      const detailedResults = await Promise.all(
+        resultsResponse.data.map((result) =>
+          getTestResultDetails(result.result_id)
+        )
+      );
+
+      // สร้าง Excel data
+      const worksheetData = [];
+
+      // Header row
       worksheetData.push([
-        detail.ai_model_id,
-        detail.model_name,
-        detail.serial_number || "",
-        detail.cop_no || "",
-        openingTime,
-        front1,
-        front2,
-        rear3,
-        fullInflator,
-        detail.overall_result || "",
-        detail.accuracy_rate ?? "",
-        detail.comment || "",
-        detail.test_date ? new Date(detail.test_date).toLocaleString() : "",
+        "Test ID",
+        "Model",
+        "Serial Number",
+        "COP No",
+        "OPENING TIME",
+        "FRONT#1",
+        "FRONT#2",
+        "REAR#3",
+        "Full Inflator",
+        "Overall Result",
+        "Reliability (%)",
+        "Comment",
+        "Test Date",
       ]);
-    }
 
-    // สร้าง workbook และ worksheet
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(worksheetData);
-    
-    // ปรับความกว้างของ columns
-    // const colWidths = [
-    //   { wch: 10 }, // Test ID
-    //   { wch: 8 },  // Model
-    //   { wch: 15 }, // Serial Number
-    //   { wch: 12 }, // COP No
-    //   { wch: 18 }, // Test Date
-    //   { wch: 12 }, // Overall Result
-    //   { wch: 12 }, // Reliability
-    //   { wch: 20 }, // Comment
-    //   { wch: 12 }, // OPENING TIME
-    //   { wch: 10 }, // FRONT#1
-    //   { wch: 10 }, // FRONT#2
-    //   { wch: 10 }, // REAR#3
-    //   { wch: 12 }  // Full Inflator
-    // ];
-    const colWidths = [
-      { wch: 10 }, // Test ID
-      { wch: 8 },  // Model
-      { wch: 15 }, // Serial Number
-      { wch: 12 }, // COP No
-      { wch: 12 },
-      { wch: 10 }, 
-      { wch: 10 },
-      { wch: 10 },
-      { wch: 12 },
-      { wch: 12 }, 
-      { wch: 12 },
-      { wch: 20 },
-      { wch: 18 }, // Test Date
-    ];
-    ws['!cols'] = colWidths;
-    
-    // เพิ่ม worksheet เข้า workbook
-    XLSX.utils.book_append_sheet(wb, ws, "Test Reports");
-    
-    // สร้างชื่อไฟล์ตาม filter
-    const dateRange = `${filters.start_date || "all"}_to_${filters.end_date || "all"}`;
-    const modelFilter = filters.model_name ? `_${filters.model_name}` : "";
-    const resultFilter = filters.overall_result ? `_${filters.overall_result}` : "";
-    const filename = `test_reports_${dateRange}${modelFilter}${resultFilter}.xlsx`;
-    
-    // ดาวโหลด Excel file
-    XLSX.writeFile(wb, filename);
-    
-  } catch (err) {
-    alert(
-      "Download failed: " + 
-      (err instanceof Error ? err.message : "Unknown error")
-    );
-  } finally {
-    setLoading(false);
-  }
-};
+      // Data rows
+      for (const detail of detailedResults) {
+        // หาค่าของแต่ละ parameter
+        const openingTime =
+          detail.details.find((d) => d.point_name === "OPENING TIME")
+            ?.measured_value || "";
+        const front1 =
+          detail.details.find((d) => d.point_name === "FRONT#1")
+            ?.measured_value || "";
+        const front2 =
+          detail.details.find((d) => d.point_name === "FRONT#2")
+            ?.measured_value || "";
+        const rear3 =
+          detail.details.find((d) => d.point_name === "REAR#3")
+            ?.measured_value || "";
+        const fullInflator =
+          detail.details.find((d) => d.point_name === "Full Inflator")
+            ?.measured_value || "";
+
+        worksheetData.push([
+          detail.ai_model_id,
+          detail.model_name,
+          detail.serial_number || "",
+          detail.cop_no || "",
+          openingTime,
+          front1,
+          front2,
+          rear3,
+          fullInflator,
+          detail.overall_result || "",
+          detail.accuracy_rate ?? "",
+          detail.comment || "",
+          detail.test_date ? new Date(detail.test_date).toLocaleString() : "",
+        ]);
+      }
+
+      // สร้าง workbook และ worksheet
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(worksheetData);
+
+      // ปรับความกว้างของ columns
+      // const colWidths = [
+      //   { wch: 10 }, // Test ID
+      //   { wch: 8 },  // Model
+      //   { wch: 15 }, // Serial Number
+      //   { wch: 12 }, // COP No
+      //   { wch: 18 }, // Test Date
+      //   { wch: 12 }, // Overall Result
+      //   { wch: 12 }, // Reliability
+      //   { wch: 20 }, // Comment
+      //   { wch: 12 }, // OPENING TIME
+      //   { wch: 10 }, // FRONT#1
+      //   { wch: 10 }, // FRONT#2
+      //   { wch: 10 }, // REAR#3
+      //   { wch: 12 }  // Full Inflator
+      // ];
+      const colWidths = [
+        { wch: 10 }, // Test ID
+        { wch: 8 }, // Model
+        { wch: 15 }, // Serial Number
+        { wch: 12 }, // COP No
+        { wch: 12 },
+        { wch: 10 },
+        { wch: 10 },
+        { wch: 10 },
+        { wch: 12 },
+        { wch: 12 },
+        { wch: 12 },
+        { wch: 20 },
+        { wch: 18 }, // Test Date
+      ];
+      ws["!cols"] = colWidths;
+
+      // เพิ่ม worksheet เข้า workbook
+      XLSX.utils.book_append_sheet(wb, ws, "Test Reports");
+
+      // สร้างชื่อไฟล์ตาม filter
+      const dateRange = `${filters.start_date || "all"}_to_${
+        filters.end_date || "all"
+      }`;
+      const modelFilter = filters.model_name ? `_${filters.model_name}` : "";
+      const productModelFilter = filters.product_model
+        ? `_${filters.product_model.replace(/\s+/g, "_")}`
+        : "";
+      const resultFilter = filters.overall_result
+        ? `_${filters.overall_result}`
+        : "";
+      const filename = `test_reports_${dateRange}${modelFilter}${resultFilter}.xlsx`;
+
+      // ดาวโหลด Excel file
+      XLSX.writeFile(wb, filename);
+    } catch (err) {
+      alert(
+        "Download failed: " +
+          (err instanceof Error ? err.message : "Unknown error")
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (loading && results.length === 0) {
     return (
@@ -518,7 +541,8 @@ export default function Reports() {
         {showFilters && (
           <div className="bg-white p-6 rounded-lg shadow mb-6">
             <h3 className="text-lg font-semibold mb-4">Filter Options</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4">
+              {/* Start Date */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Start Date
@@ -529,9 +553,11 @@ export default function Reports() {
                   onChange={(e) =>
                     handleFilterChange({ start_date: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md  cursor-pointer"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md cursor-pointer hover:border-gray-400 transition-colors duration-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none"
                 />
               </div>
+
+              {/* End Date */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   End Date
@@ -542,46 +568,56 @@ export default function Reports() {
                   onChange={(e) =>
                     handleFilterChange({ end_date: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md  cursor-pointer"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md cursor-pointer hover:border-gray-400 transition-colors duration-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Model
-                </label>
-                <select
-                  value={filters.model_name || ""}
-                  onChange={(e) =>
-                    handleFilterChange({
-                      model_name: e.target.value || undefined,
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md  cursor-pointer"
-                >
-                  <option value="">All Models</option>
-                  <option value="RT">RT (Room Temp)</option>
-                  <option value="HT">HT (Hot Temp)</option>
-                  <option value="CT">CT (Cold Temp)</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Result
-                </label>
-                <select
-                  value={filters.overall_result || ""}
-                  onChange={(e) =>
-                    handleFilterChange({
-                      overall_result: e.target.value || undefined,
-                    })
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md cursor-pointer"
-                >
-                  <option value="">All Results</option>
-                  <option value="PASS">OK</option>
-                  <option value="NG">NOK</option>
-                </select>
-              </div>
+
+              {/* Model */}
+              <CustomSelect
+                label="Model"
+                value={filters.product_model || ""}
+                onChange={(value) =>
+                  handleFilterChange({ product_model: value || undefined })
+                }
+                options={[
+                  { value: "", label: "All Models" },
+                  { value: "P703 DBL CAB", label: "P703 DBL CAB" },
+                ]}
+                placeholder="Select model"
+              />
+
+              {/* Conditioning */}
+              <CustomSelect
+                label="Conditioning"
+                value={filters.model_name || ""}
+                onChange={(value) =>
+                  handleFilterChange({ model_name: value || undefined })
+                }
+                options={[
+                  { value: "", label: "All Conditioning" },
+                  { value: "RT", label: "RT (Room Temp)" },
+                  { value: "HT", label: "HT (Hot Temp)" },
+                  { value: "CT", label: "CT (Cold Temp)" },
+                ]}
+                placeholder="Select conditioning"
+              />
+
+              {/* Result */}
+              <CustomSelect
+                label="Result"
+                value={filters.overall_result || ""}
+                onChange={(value) =>
+                  handleFilterChange({ overall_result: value || undefined })
+                }
+                options={[
+                  { value: "", label: "All Results" },
+                  { value: "PASS", label: "OK" },
+                  { value: "NG", label: "NOK" },
+                ]}
+                placeholder="Select result"
+              />
+
+              {/* Serial Number */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Serial Number
@@ -595,9 +631,11 @@ export default function Reports() {
                       serial_number: e.target.value || undefined,
                     })
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md hover:border-gray-400 transition-colors duration-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400 focus:outline-none"
                 />
               </div>
+
+              {/* COP No */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   COP No
@@ -609,15 +647,17 @@ export default function Reports() {
                   onChange={(e) =>
                     handleFilterChange({ cop_no: e.target.value || undefined })
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md hover:border-gray-400 transition-colors duration-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400 focus:outline-none"
                 />
               </div>
             </div>
-            <div className="mt-4 flex justify-end gap-3">
+
+            {/* Buttons */}
+            <div className="mt-6 flex justify-end gap-3">
               <button
                 onClick={handleDownloadByFilter}
                 disabled={loading}
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-2"
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-2 transition-colors duration-200 shadow-sm hover:shadow-md"
                 title="Download filtered results as Excel"
               >
                 <Download className="w-4 h-4" />
@@ -626,7 +666,7 @@ export default function Reports() {
               <button
                 onClick={handleResetFilters}
                 disabled={isResetDisabled}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-colors duration-200 shadow-sm hover:shadow-md"
                 title={
                   isResetDisabled ? "Already at defaults" : "Reset filters"
                 }
@@ -653,7 +693,7 @@ export default function Reports() {
                     ID
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">
-                    Date
+                    DateTime
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">
                     Model
@@ -683,7 +723,15 @@ export default function Reports() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {result.test_date
-                        ? new Date(result.test_date).toLocaleDateString()
+                        ? new Date(result.test_date).toLocaleString("th-TH", {
+                            year: "numeric",
+                            month: "2-digit",
+                            day: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                            hour12: false,
+                          })
                         : "N/A"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
