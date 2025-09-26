@@ -12,7 +12,7 @@ import {
 
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import { ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Check, ChevronDown, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
 // Types
 interface MenuItem {
@@ -131,7 +131,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const COLLAPSED_WIDTH = 80
   const [expandedWidth, setExpandedWidth] = React.useState<number>(320)
 
-  const [selectOpen, setSelectOpen] = React.useState(false);
+  // const [selectOpen, setSelectOpen] = React.useState(false);
+
+  const [modelDropdownOpen, setModelDropdownOpen] = React.useState(false);
+  const modelSelectRef = useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (modelSelectRef.current && !modelSelectRef.current.contains(event.target as Node)) {
+        setModelDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Handle model change
   const handleModelChange = (newModel: string) => {
@@ -417,29 +431,55 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     Select Model
                   </label>
 
-                  <div className="relative">
-                    <select
-                      value={model}
-                      onChange={(e) => handleModelChange(e.target.value)}
-                      onFocus={() => setSelectOpen(true)}
-                      onBlur={() => setSelectOpen(false)}
-                      onMouseDown={() => setSelectOpen((v) => !v)}
-                      className="w-full text-sm rounded-md bg-white/90 text-gray-900 px-3 py-2 pr-9 focus:outline-none focus:ring-2 focus:ring-white/40 transition-all duration-200 hover:bg-white appearance-none"
+                  <div className="relative" ref={modelSelectRef}>
+                    <div
+                      className="relative w-full text-sm rounded-md bg-white/90 text-gray-900 px-3 py-2 pr-8
+                                  focus-within:ring-2 focus-within:ring-white/40 transition-all duration-200
+                                hover:bg-white cursor-pointer flex items-center"
+                      onClick={() => setModelDropdownOpen(!modelDropdownOpen)}
                     >
-                      {MODEL_OPTIONS.map((m) => (
-                        <option key={m} value={m}>{m}</option>
-                      ))}
-                    </select>
+                      <span className="block truncate">{model}</span>
+                      <motion.span
+                        aria-hidden
+                        className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2"
+                        animate={{ rotate: modelDropdownOpen ? 180 : 0 }}
+                        initial={false}
+                        transition={{ type: "tween", duration: 0.18, ease: "easeInOut" }}
+                      >
+                        <ChevronDown className="h-4 w-4 text-gray-700/80" />
+                      </motion.span>
+                    </div>
 
-                    <motion.span
-                      aria-hidden
-                      className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2"
-                      animate={{ rotate: selectOpen ? 180 : 0 }}
-                      initial={false}
-                      transition={{ type: "tween", duration: 0.18, ease: "easeInOut" }}
+                    {/* Custom Dropdown Options */}
+                    <div
+                      className={`absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg transition-all duration-200 ${
+                        modelDropdownOpen
+                          ? "opacity-100 transform scale-100 translate-y-0"
+                          : "opacity-0 transform scale-95 -translate-y-2 pointer-events-none"
+                      }`}
                     >
-                      <ChevronDown className="h-4 w-4 text-gray-700/80" />
-                    </motion.span>
+                      <div className="py-1 max-h-60 overflow-auto">
+                        {MODEL_OPTIONS.map((option) => (
+                          <div
+                            key={option}
+                            className={`px-3 py-2 cursor-pointer hover:bg-blue-50 hover:text-blue-700 transition-colors duration-150 flex items-center justify-between ${
+                              model === option
+                                ? "bg-blue-100 text-blue-700 font-medium"
+                                : "text-gray-900"
+                            }`}
+                            onClick={() => {
+                              handleModelChange(option);
+                              setModelDropdownOpen(false);
+                            }}
+                          >
+                            <span className="block truncate">{option}</span>
+                            {model === option && (
+                              <Check className="w-4 h-4 text-blue-600" />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
 

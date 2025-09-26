@@ -2,6 +2,7 @@ export interface TestResultSummary {
   result_id: number;
   ai_model_id: number;
   model_name: string;
+  product_model?: string | null;
   cop_no?: string | null;
   serial_number?: string | null;
   test_date?: string | null;

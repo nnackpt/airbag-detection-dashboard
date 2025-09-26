@@ -218,6 +218,7 @@ export default function Reports() {
         [
           "Test ID",
           "Model",
+          "Condition",
           "Serial Number",
           "COP No",
           "Test Date",
@@ -231,6 +232,7 @@ export default function Reports() {
       lines.push(
         [
           d.ai_model_id,
+          d.product_model || "",
           d.model_name,
           d.serial_number || "",
           d.cop_no || "",
@@ -371,6 +373,7 @@ export default function Reports() {
       worksheetData.push([
         "Test ID",
         "Model",
+        "Condition",
         "Serial Number",
         "COP No",
         "OPENING TIME",
@@ -405,6 +408,7 @@ export default function Reports() {
 
         worksheetData.push([
           detail.ai_model_id,
+          detail.product_model || "",
           detail.model_name,
           detail.serial_number || "",
           detail.cop_no || "",
@@ -442,6 +446,7 @@ export default function Reports() {
       // ];
       const colWidths = [
         { wch: 10 }, // Test ID
+        { wch: 15 },
         { wch: 8 }, // Model
         { wch: 15 }, // Serial Number
         { wch: 12 }, // COP No
@@ -693,32 +698,35 @@ export default function Reports() {
             </h3>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          <div className="hidden lg:block overflow-x-auto">
+            <table className="w-full min-w-full">
               <thead className="bg-[#164799]">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase min-w-[80px]">
                     ID
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase min-w-[140px]">
                     DateTime
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase min-w-[120px]">
                     Model
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase min-w-[100px]">
+                    Condition
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase min-w-[120px]">
                     Serial Number
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase min-w-[100px]">
                     COP No
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase min-w-[90px]">
                     Result
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase min-w-[100px]">
                     Reliability
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase">
+                  <th className="px-4 py-3 text-left text-xs font-medium text-white uppercase min-w-[140px]">
                     Actions
                   </th>
                 </tr>
@@ -726,10 +734,10 @@ export default function Reports() {
               <tbody className="divide-y divide-gray-200">
                 {results.map((result) => (
                   <tr key={result.result_id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                       {result.ai_model_id}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                       {result.test_date
                         ? new Date(result.test_date).toLocaleString("th-TH", {
                             year: "numeric",
@@ -742,29 +750,34 @@ export default function Reports() {
                           })
                         : "N/A"}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <span className="px-2 py-1 text-xs rounded-full bg-emerald-100 text-emerald-800">
+                        {result.product_model || "P703 DBL CAB"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap">
                       <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
                         {result.model_name}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                       {result.serial_number || "N/A"}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                       {result.cop_no || "N/A"}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         {getResultStatusIcon(result.overall_result)}
                         {getResultStatusBadge(result.overall_result)}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                       {result.accuracy_rate
                         ? `${result.accuracy_rate}%`
                         : "N/A"}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleViewDetails(result.result_id)}
@@ -773,13 +786,6 @@ export default function Reports() {
                           <Eye className="w-4 h-4" />
                           View
                         </button>
-                        {/* <button
-                          onClick={() => handleDelete(result.result_id)}
-                          className="text-red-600 hover:text-red-900 flex items-center gap-1"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          Delete
-                        </button> */}
                         <button
                           onClick={() => handleDownload(result.result_id)}
                           className="text-green-600 hover:text-green-900 flex items-center gap-1 cursor-pointer"
@@ -795,6 +801,7 @@ export default function Reports() {
               </tbody>
             </table>
           </div>
+
 
           {/* Pagination */}
           {totalPages > 1 && (
@@ -891,7 +898,13 @@ export default function Reports() {
                     <span>{selectedResult.ai_model_id}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="font-medium">Model:</span>
+                    <span className="font-medium">Product Model:</span>
+                    <span className="px-2 py-1 text-xs rounded-full bg-emerald-100 text-emerald-800">
+                      {selectedResult.product_model || "P703 DBL CAB"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">Condition:</span>
                     <span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">
                       {selectedResult.model_name}
                     </span>
