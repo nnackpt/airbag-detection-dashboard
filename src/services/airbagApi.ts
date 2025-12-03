@@ -1,3 +1,4 @@
+import { getConfig } from '@/lib/config';
 import {
   ProcessingStatus,
   ProcessingResult,
@@ -13,39 +14,48 @@ import {
   ExcelFilesResponse,
   DbHealth,
 } from '../types/airbag';
-// import type { Alert } from "@/types/airbag";
 
 declare global {
   interface Window {
     __AIRBAG_API_BASE__?: string;
   }
 }
+
+let _apiBaseCache: string | null = null
  
-export const API_BASE =
-  (typeof window !== 'undefined'
-    ? (window).__AIRBAG_API_BASE__
-    : undefined) ||
-  process.env.NEXT_PUBLIC_API_BASE ||
-  'http://ata-of-wd2345:8082';
+async function getApiBase(): Promise<string> {
+  if (_apiBaseCache) return _apiBaseCache
+
+  if (typeof window !== "undefined" && window.__AIRBAG_API_BASE__) {
+    _apiBaseCache = window.__AIRBAG_API_BASE__
+    return _apiBaseCache
+  }
+
+  const config = await getConfig()
+  _apiBaseCache = config.API_URL
+  return _apiBaseCache
+}
+
+// Fallback
+export const API_BASE = "http://ata-of-wd2345:8082"
 
 // Build a WebSocket URL that targets the same host as API_BASE
-export function wsUrl(path: string): string {
-  const url = new URL(API_BASE);
+export async function wsUrl(path: string): Promise<string> {
+  const base = await getApiBase();
+  const url = new URL(base);
   const isSecure = url.protocol === 'https:';
   const wsProto = isSecure ? 'wss:' : 'ws:';
-  // normalize path
   const p = path.startsWith('/') ? path : `/${path}`;
   return `${wsProto}//${url.host}${p}`;
 }
 
-// helper: safe fetch with typed json
 async function getJSON<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const base = await getApiBase()
+  const res = await fetch(`${base}${path}`, {
     ...init,
     headers: {
       ...(init?.headers ?? {}),
     },
-    // สำคัญ: ปล่อยให้ CORS ทำงานตามฝั่ง backend
     cache: 'no-store',
   });
   if (!res.ok) {
@@ -55,16 +65,15 @@ async function getJSON<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-// helper: POST JSON ไม่มี body ก็ใช้ได้
 async function postJSON<T>(path: string, body?: unknown, init?: RequestInit): Promise<T> {
-  // Cast the headers to a more specific type that allows string indexing
+  const base = await getApiBase();
   const headers = (init?.headers ?? {}) as Record<string, string>;
  
   if (body) {
     headers['Content-Type'] = 'application/json';
   }
  
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${base}${path}`, {
     method: 'POST',
     body: body ? JSON.stringify(body) : undefined,
     headers,
@@ -79,7 +88,7 @@ async function postJSON<T>(path: string, body?: unknown, init?: RequestInit): Pr
   return (await res.json()) as T;
 }
 
-// ================= Core endpoints =================
+// Core endpoints
 
 // GET /status -> SystemStats
 export function getSystemStatus(): Promise<SystemStats> {
@@ -121,7 +130,8 @@ export function acknowledgeAlert(alertId: string): Promise<AckAlertResponse> {
 
 // DELETE /alerts/acknowledged
 export async function clearAcknowledgedAlerts(): Promise<ClearAckAlertsResponse> {
-  const res = await fetch(`${API_BASE}/alerts/acknowledged`, {
+  const base = await getApiBase();
+  const res = await fetch(`${base}/alerts/acknowledged`, {
     method: 'DELETE',
     cache: 'no-store',
   });
@@ -132,8 +142,6 @@ export async function clearAcknowledgedAlerts(): Promise<ClearAckAlertsResponse>
   return (await res.json()) as ClearAckAlertsResponse;
 }
 
-// ================= Legacy file-mode endpoints =================
-
 // GET /videos -> VideoInfo[]
 export function listVideos(): Promise<VideoInfo[]> {
   return getJSON<VideoInfo[]>('/videos');
@@ -141,9 +149,10 @@ export function listVideos(): Promise<VideoInfo[]> {
 
 // POST /upload (multipart/form-data)
 export async function uploadVideo(file: File): Promise<UploadVideoResponse> {
+  const base = await getApiBase();
   const form = new FormData();
   form.append('file', file);
-  const res = await fetch(`${API_BASE}/upload`, {
+  const res = await fetch(`${base}/upload`, {
     method: 'POST',
     body: form,
   });
@@ -162,8 +171,9 @@ export function queueProcessVideo(videoName: string): Promise<QueueVideoResponse
 
 // GET /download/{filename} -> ไฟล์ Excel (Response)
 export async function downloadExcel(filename: string): Promise<Blob> {
+  const base = await getApiBase();
   const encoded = encodeURIComponent(filename);
-  const res = await fetch(`${API_BASE}/download/${encoded}`, { cache: 'no-store' });
+  const res = await fetch(`${base}/download/${encoded}`, { cache: 'no-store' });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`${res.status} ${res.statusText} :: ${text || 'download failed'}`);
@@ -181,13 +191,6 @@ export function dbHealth(): Promise<DbHealth> {
   return getJSON<DbHealth>('/db/health');
 }
 
-// async function _json<T>(url: string, init?: RequestInit): Promise<T> {
-//   const base = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
-//   const res = await fetch(`${base}${url}`, { cache: "no-store", ...init });
-//   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-//   return res.json() as Promise<T>;
-// }
-
 export function getPendingNgAlerts(): Promise<Alert[]> {
   return getJSON<Alert[]>('/alerts/pending-ng');
 }
@@ -198,7 +201,8 @@ export function continueAfterNg(alertId: string): Promise<{ message: string; ale
 }
 
 export async function getAccuracyAvg(): Promise<{ accuracy_avg: number | null; count: number }>{
-  const res = await fetch(`/kpi/accuracy-avg`, { cache: "no-store" });
+  const base = await getApiBase();
+  const res = await fetch(`${base}/kpi/accuracy-avg`, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to fetch accuracy average");
   return res.json();
 }

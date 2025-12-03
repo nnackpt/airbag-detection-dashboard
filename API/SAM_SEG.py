@@ -33,7 +33,7 @@ PROGRESS_CALLBACK = None
 
 
 # Config
-NETWORK_PATH = r"\\ata-la-wd2201\Video"  #  10.83.20.25    UNC path  r"\\10.86.16.40\AI_ML Project\MLAB_Video"  Test environment   r"\\10.83.20.25\Video" = Lab
+NETWORK_PATH = r"\\ata-la-wd2201\Video"  #  10.83.20.25    UNC path  r"\\10.86.16.40\AI_ML Project\MLAB_Video" Video_Test Test environment   r"\\10.83.20.25\Video" = Lab
 USERNAME = "z-jadet.jewpattanaku"
 PASSWORD = "Onelabel62"
 
@@ -158,11 +158,11 @@ class Config:
     # INPUT_DIR = r"\\ata-la-wd2201\Video"
     
     
-    PROCESSING_DIR = r"\\ata-of-wd2345\AI Project\ML_AB\videos\Video"
-    BIN_DIR = r"\\ata-of-wd2345\AI Project\ML_AB\videos\Bin"     # processed folders destination
-    OUTPUT_DIR = r"\\ata-of-wd2345\AI Project\ML_AB\videos\Result"  # Excel results directory
-    EXCEL_OUTPUT_PATH = r"\\ata-of-wd2345\AI Project\ML_AB\videos\Result\airbag_results.xlsx"
-    LOG_FILE = r"\\ata-of-wd2345\AI Project\ML_AB\videos\Result\automation.log"
+    PROCESSING_DIR = r"\\ata-of-wd2345\AI Project\01. MLAB CAB\videos\Videos"
+    BIN_DIR = r"\\ata-of-wd2345\AI Project\01. MLAB CAB\videos\Bin"     # processed folders destination
+    OUTPUT_DIR = r"\\ata-of-wd2345\AI Project\01. MLAB CAB\videos\Result"  # Excel results directory
+    EXCEL_OUTPUT_PATH = r"\\ata-of-wd2345\AI Project\01. MLAB CAB\videos\Result\airbag_results.xlsx"
+    LOG_FILE = r"\\ata-of-wd2345\AI Project\01. MLAB CAB\videos\Result\automation.log"
     
     PER_VIDEO_TIMEOUT_SECONDS = 420        # รวมทั้งคลิป (~7 นาที)
     DETECTION_STAGE_TIMEOUT_SECONDS = 150  # เฉพาะช่วงหา FR1/FR2/RE3 + explosion
@@ -790,8 +790,9 @@ class OCR:
 
     def _is_valid_cop_format(self, cop_str: str) -> bool:
         """
-        Validate COPNo format: should be like 2504355-CAB-LH-RT or similar
-        Pattern: [7digits]-[3letters]-[2letters]-[2letters]
+        Validate COPNo format: supports two formats
+        Format 1: 2504355-CAB-LH-RT ([7digits]-[3letters]-[2letters]-[2letters])
+        Format 2: T-25348513 ([1letter]-[8digits])
         """
         if not cop_str or not isinstance(cop_str, str):
             return False
@@ -799,20 +800,32 @@ class OCR:
         # Remove whitespace and convert to uppercase for checking
         cop_clean = cop_str.strip().upper()
         
-        # Pattern: 7 digits, dash, 3 letters, dash, 2 letters, dash, 2 letters
-        pattern = r'^\d{7}-[A-Z]{3}-[A-Z]{2}-[A-Z]{2}$'
-        return bool(re.match(pattern, cop_clean))
+        # Pattern 1: 7 digits, dash, 3 letters, dash, 2 letters, dash, 2 letters
+        pattern1 = r'^\d{7}-[A-Z]{3}-[A-Z]{2}-[A-Z]{2}$'
+        
+        # Pattern 2: 1 letter, dash, 8 digits
+        pattern2 = r'^[A-Z]-\d{8}$'
+        
+        return bool(re.match(pattern1, cop_clean) or re.match(pattern2, cop_clean))
 
     def extract_ms_and_cop(self, image: Image.Image, max_new_tokens: int = 32) -> dict:
         if image is None:
             return {"error": "No image provided."}
 
-        # Enhanced prompt for better COP detection
+        # Enhanced prompt to support COP formats
         query = (
-            "Read the time (in milliseconds) and COP NO shown near the top-left corner of the image. "
-            "The COP NO should be exactly 7 digits followed by dashes and letters (like 2504355-CAB-LH-RT). "
-            "Return exactly in this format: ms=13.6, cop=2504355-CAB-LH-RT "
-            "(The time should be a number only, without '+' or '-' sign)"
+            "Carefully examine the top-left corner of the image and extract the following information:\n\n"
+            "1. Time in milliseconds (appears as a number, may have format like +13.6 or 13.6)\n"
+            "2. COP NO (Component Part Number) which can appear in TWO possible formats:\n"
+            "   - Format A: 7 digits followed by dashes and letters (example: 2504355-CAB-LH-RT)\n"
+            "   - Format B: 1 letter, dash, followed by 8 digits (example: T-25348513)\n\n"
+            "Return EXACTLY in this format:\n"
+            "ms=<time_value>, cop=<COP_NO>\n\n"
+            "Examples:\n"     "- ms=13.6, cop=2504355-CAB-LH-RT\n"
+            "- ms=13.6, cop=T-25348513\n\n"
+            "Important notes:\n"
+            "- For time: return only the numeric value without any '+' or '-' signs\n"
+            "- For COP NO: return exactly as shown in the image, preserving all dashes and letters"
         )
 
         messages = [{
