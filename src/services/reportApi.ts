@@ -30,12 +30,12 @@ export function getTestResults(filters: Partial<ReportsFilter> = {}): Promise<Re
   if (filters.page_size) params.append('page_size', filters.page_size.toString());
   
   const queryString = params.toString();
-  return getJSON<ReportsResponse>(`/reports/sp/test-results${queryString ? '?' + queryString : ''}`);
+  return getJSON<ReportsResponse>(`/reports/test-results${queryString ? '?' + queryString : ''}`);
 }
 
 // GET /reports/test-result/{result_id}
 export function getTestResultDetails(resultId: number): Promise<TestResultWithDetails> {
-  return getJSON<TestResultWithDetails>(`/reports/sp/test-result/${resultId}`);
+  return getJSON<TestResultWithDetails>(`/reports/test-result/${resultId}`);
 }
 
 // GET /reports/statistics
@@ -45,5 +45,5 @@ export function getReportsStatistics(startDate?: string, endDate?: string): Prom
   if (endDate) params.append('end_date', endDate);
   
   const queryString = params.toString();
-  return getJSON<ReportsStatistics>(`/reports/sp/statistics${queryString ? '?' + queryString : ''}`);
+  return getJSON<ReportsStatistics>(`/reports/statistics${queryString ? '?' + queryString : ''}`);
 }
